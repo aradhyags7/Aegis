@@ -1,29 +1,20 @@
 /**
- * Aegis AI — Maximum Frontend
+ * AEGIS // J.A.R.V.I.S. Tactical AI Desktop Interface
  *
- * Features:
- *  ✦ SSE streaming with live token-by-token rendering + blinking cursor
- *  ✦ Full inline Markdown renderer  (code blocks, inline code, bold, italic, lists, headings)
- *  ✦ Syntax-highlighted code blocks with one-click copy
- *  ✦ Abort / cancel mid-stream
- *  ✦ Session ID (UUID, persisted to localStorage)
- *  ✦ Chat history persisted to localStorage
- *  ✦ Smart auto-scroll (pauses when user scrolls up)
- *  ✦ Real-time backend health polling
- *  ✦ Dynamic model list fetched from /models
- *  ✦ Copy any message to clipboard
- *  ✦ Regenerate last response
- *  ✦ Clear chat (local + backend memory)
- *  ✦ Message timestamps
- *  ✦ Keyboard shortcuts: Enter=send  Esc=abort  Ctrl+L=clear
- *  ✦ Typing indicator only while waiting for first token
- *  ✦ Voice input via MediaRecorder → /voice/transcribe (Faster-Whisper backend)
- *  ✦ Visual feedback for recording state
- *  ✦ Text-to-Speech (speechSynthesis)
- *  ✦ Zero extra dependencies — pure React + TypeScript
+ * Capabilities:
+ *  ✦ Dual View Architecture:
+ *      1. Holographic HUD Mode (Iron Man / Arc Reactor Core, live subtitles, audio telemetry)
+ *      2. Tactical Command Terminal (Glassmorphic chat, syntax-highlighted code, markdown)
+ *  ✦ Dynamic Dark / Light Themes (Cosmic Obsidian & Titanium Stark White)
+ *  ✦ Interactive Sound-Reactive Arc Reactor with Click Shockwaves & Orbiting Nodes
+ *  ✦ Real-time Voice Activity Detection (VAD) & Silence Auto-Stop (~1.3s)
+ *  ✦ Zero-Latency Barge-In Interruption Engine
+ *  ✦ Local Faster-Whisper Transcription & Ollama SSE Streaming
+ *  ✦ Local SpeechSynthesis TTS with markdown stripping
+ *  ✦ Keyboard Shortcuts: Tab=Toggle HUD/Terminal, Enter=Send, Esc=Abort/Interrupt, Ctrl+M=Voice Mode, Ctrl+L=Clear
  */
 
-import {
+import React, {
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -38,6 +29,8 @@ import {
   playAudioCue,
 } from "./voiceController";
 
+import { JarvisHudView } from "./components/JarvisHudView";
+
 // ─────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────
@@ -51,6 +44,8 @@ interface Message {
 }
 
 type BackendStatus = "checking" | "online" | "offline";
+type ViewMode = "HUD" | "TERMINAL";
+type ThemeMode = "dark" | "light";
 
 // ─────────────────────────────────────────────────────────
 // Helpers
@@ -62,7 +57,10 @@ function uuid(): string {
 
 function getSessionId(): string {
   let id = localStorage.getItem("aegis_session");
-  if (!id) { id = uuid(); localStorage.setItem("aegis_session", id); }
+  if (!id) {
+    id = uuid();
+    localStorage.setItem("aegis_session", id);
+  }
   return id;
 }
 
@@ -70,11 +68,12 @@ function loadHistory(): Message[] {
   try {
     const raw = localStorage.getItem("aegis_chat");
     return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 function saveHistory(msgs: Message[]) {
-  // keep last 100 messages only
   localStorage.setItem("aegis_chat", JSON.stringify(msgs.slice(-100)));
 }
 
@@ -96,36 +95,55 @@ function CopyBtn({ code }: CopyBtnProps) {
     });
   };
   return (
-    <button onClick={copy} style={{
-      position: "absolute", top: "10px", right: "10px",
-      background: copied ? "#1a3a5c" : "#0d1f35",
-      border: "1px solid #1e3a5f",
-      color: copied ? "#60a5fa" : "#475569",
-      fontSize: "11px", padding: "3px 10px", borderRadius: "6px",
-      cursor: "pointer", fontFamily: "'DM Mono', monospace",
-      transition: "all 0.15s",
-    }}>
-      {copied ? "✓ copied" : "copy"}
+    <button
+      onClick={copy}
+      style={{
+        position: "absolute",
+        top: "8px",
+        right: "8px",
+        background: copied ? "var(--cyan-border-active)" : "var(--bg-card)",
+        border: "1px solid var(--cyan-border)",
+        color: copied ? "var(--cyan-glow)" : "var(--text-muted)",
+        fontSize: "11px",
+        padding: "3px 10px",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontFamily: "'DM Mono', monospace",
+        transition: "all 0.15s",
+      }}
+    >
+      {copied ? "✓ COPIED" : "COPY"}
     </button>
   );
 }
 
 function renderInline(text: string): React.ReactNode[] {
-  // bold, italic, inline code
   const parts = text.split(/(\*\*.*?\*\*|`[^`]+`|\*[^*]+\*)/g);
   return parts.map((p, i) => {
-    if (p.startsWith("**") && p.endsWith("**"))
-      return <strong key={i} style={{ color: "#e2e8f0", fontWeight: 600 }}>{p.slice(2, -2)}</strong>;
-    if (p.startsWith("`") && p.endsWith("`"))
+    if (p.startsWith("**") && p.endsWith("**")) {
+      return <strong key={i} style={{ color: "var(--text-main)", fontWeight: 600 }}>{p.slice(2, -2)}</strong>;
+    }
+    if (p.startsWith("`") && p.endsWith("`")) {
       return (
-        <code key={i} style={{
-          background: "#0d1f35", color: "#7dd3fc",
-          padding: "1px 6px", borderRadius: "4px",
-          fontSize: "13px", fontFamily: "'DM Mono', monospace",
-        }}>{p.slice(1, -1)}</code>
+        <code
+          key={i}
+          style={{
+            background: "var(--cyan-hover)",
+            color: "var(--text-cyan)",
+            border: "1px solid var(--cyan-border)",
+            padding: "1px 6px",
+            borderRadius: "4px",
+            fontSize: "13px",
+            fontFamily: "'DM Mono', monospace",
+          }}
+        >
+          {p.slice(1, -1)}
+        </code>
       );
-    if (p.startsWith("*") && p.endsWith("*"))
-      return <em key={i} style={{ color: "#94a3b8" }}>{p.slice(1, -1)}</em>;
+    }
+    if (p.startsWith("*") && p.endsWith("*")) {
+      return <em key={i} style={{ color: "var(--text-muted)" }}>{p.slice(1, -1)}</em>;
+    }
     return p;
   });
 }
@@ -150,23 +168,37 @@ function MarkdownRenderer({ text, streaming }: { text: string; streaming?: boole
       }
       const code = codeLines.join("\n");
       nodes.push(
-        <div key={`code-${i}`} style={{ position: "relative", margin: "10px 0" }}>
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            background: "#06101e", borderRadius: "8px 8px 0 0",
-            padding: "6px 12px", borderBottom: "1px solid #1e3a5f",
-          }}>
-            <span style={{ fontSize: "11px", color: "#334155", fontFamily: "'DM Mono', monospace" }}>
-              {lang}
+        <div key={`code-${i}`} style={{ position: "relative", margin: "12px 0" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: "var(--bg-header)",
+              borderRadius: "6px 6px 0 0",
+              padding: "6px 12px",
+              border: "1px solid var(--cyan-border)",
+              borderBottom: "none",
+            }}
+          >
+            <span style={{ fontSize: "11px", color: "var(--text-cyan)", fontFamily: "'Orbitron', monospace", letterSpacing: "1px" }}>
+              // {lang.toUpperCase()}
             </span>
           </div>
-          <pre style={{
-            background: "#060f1c", margin: 0, padding: "14px 16px",
-            borderRadius: "0 0 8px 8px", overflowX: "auto",
-            fontSize: "13px", lineHeight: "1.6",
-            color: "#93c5fd", fontFamily: "'DM Mono', monospace",
-            border: "1px solid #1e293b", borderTop: "none",
-          }}>
+          <pre
+            style={{
+              background: "var(--bg-deep)",
+              margin: 0,
+              padding: "14px 16px",
+              borderRadius: "0 0 6px 6px",
+              overflowX: "auto",
+              fontSize: "13px",
+              lineHeight: "1.6",
+              color: "var(--text-main)",
+              fontFamily: "'DM Mono', monospace",
+              border: "1px solid var(--cyan-border)",
+            }}
+          >
             <code>{code}</code>
           </pre>
           <CopyBtn code={code} />
@@ -180,25 +212,31 @@ function MarkdownRenderer({ text, streaming }: { text: string; streaming?: boole
     const h3 = line.match(/^### (.+)/);
     const h2 = line.match(/^## (.+)/);
     const h1 = line.match(/^# (.+)/);
-    if (h3) { nodes.push(<h3 key={i} style={{ fontSize: "14px", fontWeight: 600, color: "#93c5fd", margin: "10px 0 4px" }}>{renderInline(h3[1])}</h3>);
-i++; continue; }
-    if (h2) { nodes.push(<h2 key={i} style={{ fontSize: "15px", fontWeight: 600, color: "#bfdbfe", margin: "12px 0 4px" }}>{renderInline(h2[1])}</h2>);
-i++; continue; }
-    if (h1) { nodes.push(<h1 key={i} style={{ fontSize: "17px", fontWeight: 700, color: "#e2e8f0", margin: "12px 0 6px" }}>{renderInline(h1[1])}</h1>);
-i++; continue; }
+    if (h3) {
+      nodes.push(<h3 key={i} style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-cyan)", margin: "10px 0 4px", fontFamily: "'Orbitron', monospace" }}>{renderInline(h3[1])}</h3>);
+      i++; continue;
+    }
+    if (h2) {
+      nodes.push(<h2 key={i} style={{ fontSize: "15px", fontWeight: 600, color: "var(--blue-core)", margin: "12px 0 4px", fontFamily: "'Orbitron', monospace" }}>{renderInline(h2[1])}</h2>);
+      i++; continue;
+    }
+    if (h1) {
+      nodes.push(<h1 key={i} style={{ fontSize: "17px", fontWeight: 700, color: "var(--text-main)", margin: "12px 0 6px", fontFamily: "'Orbitron', monospace" }}>{renderInline(h1[1])}</h1>);
+      i++; continue;
+    }
 
     // Bullet list
     if (line.match(/^[-*] .+/)) {
       const items: React.ReactNode[] = [];
       while (i < lines.length && lines[i].match(/^[-*] .+/)) {
         items.push(
-          <li key={i} style={{ padding: "2px 0", color: "#cbd5e1" }}>
+          <li key={i} style={{ padding: "2px 0", color: "var(--text-secondary)" }}>
             {renderInline(lines[i].replace(/^[-*] /, ""))}
           </li>
         );
         i++;
       }
-      nodes.push(<ul key={`ul-${i}`} style={{ margin: "6px 0", paddingLeft: "18px", listStyle: "disc" }}>{items}</ul>);
+      nodes.push(<ul key={`ul-${i}`} style={{ margin: "6px 0", paddingLeft: "18px", listStyle: "square" }}>{items}</ul>);
       continue;
     }
 
@@ -207,7 +245,7 @@ i++; continue; }
       const items: React.ReactNode[] = [];
       while (i < lines.length && lines[i].match(/^\d+\. .+/)) {
         items.push(
-          <li key={i} style={{ padding: "2px 0", color: "#cbd5e1" }}>
+          <li key={i} style={{ padding: "2px 0", color: "var(--text-secondary)" }}>
             {renderInline(lines[i].replace(/^\d+\. /, ""))}
           </li>
         );
@@ -219,19 +257,19 @@ i++; continue; }
 
     // Horizontal rule
     if (line.match(/^---+$/)) {
-      nodes.push(<hr key={i} style={{ border: "none", borderTop: "1px solid #1e293b", margin: "10px 0" }} />);
+      nodes.push(<hr key={i} style={{ border: "none", borderTop: "1px solid var(--cyan-border)", margin: "10px 0" }} />);
       i++; continue;
     }
 
-    // Empty line = spacer
+    // Empty line
     if (line.trim() === "") {
       nodes.push(<div key={i} style={{ height: "6px" }} />);
       i++; continue;
     }
 
-    // Regular paragraph
+    // Paragraph
     nodes.push(
-      <p key={i} style={{ margin: "2px 0", color: "#cbd5e1", lineHeight: "1.65" }}>
+      <p key={i} style={{ margin: "3px 0", color: "var(--text-secondary)", lineHeight: "1.65" }}>
         {renderInline(line)}
       </p>
     );
@@ -239,21 +277,27 @@ i++; continue; }
   }
 
   return (
-    <div style={{ fontSize: "14.5px", fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ fontSize: "14.5px", fontFamily: "'Outfit', sans-serif" }}>
       {nodes}
       {streaming && (
-        <span style={{
-          display: "inline-block", width: "2px", height: "14px",
-          background: "#3b82f6", marginLeft: "2px", verticalAlign: "middle",
-          animation: "blink 0.9s step-end infinite",
-        }} />
+        <span
+          style={{
+            display: "inline-block",
+            width: "2px",
+            height: "14px",
+            background: "var(--cyan-glow)",
+            marginLeft: "2px",
+            verticalAlign: "middle",
+            animation: "blink 0.8s step-end infinite",
+          }}
+        />
       )}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────
-// MessageBubble
+// MessageBubble Component
 // ─────────────────────────────────────────────────────────
 
 function MessageBubble({
@@ -280,132 +324,192 @@ function MessageBubble({
         display: "flex",
         flexDirection: "column",
         alignItems: isUser ? "flex-end" : "flex-start",
-        animation: "fadeSlideIn 0.22s ease forwards",
+        animation: "fadeSlideIn 0.2s ease forwards",
         gap: "4px",
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", maxWidth: "80%" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", maxWidth: "84%" }}>
         {!isUser && (
-          <div style={{
-            width: "28px", height: "28px", borderRadius: "50%",
-            background: "linear-gradient(135deg, #1e40af, #3b82f6)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "11px", fontWeight: "700", color: "white",
-            flexShrink: 0, marginTop: "2px",
-            fontFamily: "'DM Mono', monospace",
-          }}>Æ</div>
+          <div
+            style={{
+              width: "30px",
+              height: "30px",
+              borderRadius: "8px",
+              background: "linear-gradient(135deg, var(--cyan-dim), var(--cyan-glow))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "12px",
+              fontWeight: "800",
+              color: "#fff",
+              flexShrink: 0,
+              marginTop: "2px",
+              fontFamily: "'Orbitron', monospace",
+              boxShadow: "0 0 12px var(--shadow-glow)",
+            }}
+          >
+            Æ
+          </div>
         )}
 
-        <div style={{
-          padding: isUser ? "11px 15px" : "13px 16px",
-          borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-          background: isUser ? "linear-gradient(135deg, #1d4ed8, #2563eb)" : "#0a1628",
-          border: isUser ? "none" : "1px solid #1a2e4a",
-          color: isUser ? "#e0eaff" : "#cbd5e1",
-          boxShadow: isUser ? "0 2px 14px rgba(37,99,235,0.25)" : "0 1px 6px rgba(0,0,0,0.4)",
-          wordBreak: "break-word",
-          maxWidth: "100%",
-        }}>
-          {isUser
-            ? <p style={{ margin: 0, lineHeight: "1.6", fontSize: "14.5px", whiteSpace: "pre-wrap" }}>{msg.text}</p>
-            : <MarkdownRenderer text={msg.text} streaming={msg.streaming} />
-          }
+        <div
+          className={isUser ? "" : "hud-corner-box"}
+          style={{
+            padding: isUser ? "10px 16px" : "14px 18px",
+            borderRadius: isUser ? "16px 16px 2px 16px" : "4px",
+            background: isUser
+              ? "linear-gradient(135deg, var(--blue-deep), var(--blue-core))"
+              : "var(--bg-card)",
+            border: isUser ? "1px solid rgba(59, 130, 246, 0.4)" : "1px solid var(--cyan-border)",
+            color: isUser ? "#f8fafc" : "var(--text-secondary)",
+            boxShadow: isUser
+              ? "0 2px 16px rgba(37, 99, 235, 0.3)"
+              : "0 0 16px var(--shadow-glow)",
+            wordBreak: "break-word",
+            maxWidth: "100%",
+          }}
+        >
+          {isUser ? (
+            <p style={{ margin: 0, lineHeight: "1.6", fontSize: "14px", whiteSpace: "pre-wrap", fontFamily: "'Outfit', sans-serif" }}>
+              {msg.text}
+            </p>
+          ) : (
+            <MarkdownRenderer text={msg.text} streaming={msg.streaming} />
+          )}
         </div>
       </div>
 
       {/* Actions row */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: "6px",
-        paddingLeft: isUser ? 0 : "38px",
-        opacity: hover ? 1 : 0,
-        transition: "opacity 0.15s",
-        pointerEvents: hover ? "auto" : "none",
-      }}>
-        <span style={{ fontSize: "10.5px", color: "#1e3a5f", fontFamily: "'DM Mono', monospace" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          paddingLeft: isUser ? 0 : "40px",
+          opacity: hover ? 1 : 0,
+          transition: "opacity 0.15s",
+          pointerEvents: hover ? "auto" : "none",
+        }}
+      >
+        <span style={{ fontSize: "10px", color: "var(--text-muted)", fontFamily: "'DM Mono', monospace" }}>
           {fmtTime(msg.timestamp)}
         </span>
-        <button onClick={() => onCopy(msg.text)} style={{
-          background: "none", border: "1px solid #1e293b", color: "#334155",
-          fontSize: "10.5px", padding: "2px 8px", borderRadius: "5px",
-          cursor: "pointer", fontFamily: "'DM Mono', monospace",
-          transition: "color 0.1s, border-color 0.1s",
-        }}
-          onMouseEnter={(e) => { (e.target as HTMLElement).style.color = "#60a5fa"; (e.target as HTMLElement).style.borderColor = "#1e3a5f"; }}
-          onMouseLeave={(e) => { (e.target as HTMLElement).style.color = "#334155"; (e.target as HTMLElement).style.borderColor = "#1e293b"; }}
-        >copy</button>
-        {!isUser && onSpeak && !msg.streaming && (
-          <button onClick={onSpeak} style={{
-            background: "none", border: "1px solid #1e293b", color: "#334155",
-            fontSize: "10.5px", padding: "2px 8px", borderRadius: "5px",
-            cursor: "pointer", fontFamily: "'DM Mono', monospace",
-            transition: "color 0.1s",
+        <button
+          onClick={() => onCopy(msg.text)}
+          style={{
+            background: "none",
+            border: "1px solid var(--cyan-border)",
+            color: "var(--text-muted)",
+            fontSize: "10px",
+            padding: "2px 6px",
+            borderRadius: "3px",
+            cursor: "pointer",
+            fontFamily: "'DM Mono', monospace",
           }}
-            onMouseEnter={(e) => { (e.target as HTMLElement).style.color = "#60a5fa"; }}
-            onMouseLeave={(e) => { (e.target as HTMLElement).style.color = "#334155"; }}
-          >{isSpeaking ? "■ stop" : "🔊 speak"}</button>
+        >
+          COPY
+        </button>
+        {!isUser && onSpeak && !msg.streaming && (
+          <button
+            onClick={onSpeak}
+            style={{
+              background: "none",
+              border: "1px solid var(--cyan-border)",
+              color: "var(--text-cyan)",
+              fontSize: "10px",
+              padding: "2px 6px",
+              borderRadius: "3px",
+              cursor: "pointer",
+              fontFamily: "'DM Mono', monospace",
+            }}
+          >
+            {isSpeaking ? "■ STOP" : "🔊 SPEAK"}
+          </button>
         )}
         {!isUser && isLast && onRegenerate && !msg.streaming && (
-          <button onClick={onRegenerate} style={{
-            background: "none", border: "1px solid #1e293b", color: "#334155",
-            fontSize: "10.5px", padding: "2px 8px", borderRadius: "5px",
-            cursor: "pointer", fontFamily: "'DM Mono', monospace",
-            transition: "color 0.1s",
-          }}
-            onMouseEnter={(e) => { (e.target as HTMLElement).style.color = "#60a5fa"; }}
-            onMouseLeave={(e) => { (e.target as HTMLElement).style.color = "#334155"; }}
-          >↺ regenerate</button>
+          <button
+            onClick={onRegenerate}
+            style={{
+              background: "none",
+              border: "1px solid var(--cyan-border)",
+              color: "var(--text-muted)",
+              fontSize: "10px",
+              padding: "2px 6px",
+              borderRadius: "3px",
+              cursor: "pointer",
+              fontFamily: "'DM Mono', monospace",
+            }}
+          >
+            ↺ REGEN
+          </button>
         )}
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────
-// TypingDots
-// ─────────────────────────────────────────────────────────
-
 function TypingDots() {
   return (
-    <div style={{ display: "flex", gap: "5px", padding: "3px 2px", alignItems: "center" }}>
+    <div style={{ display: "flex", gap: "5px", padding: "4px 2px", alignItems: "center" }}>
       {[0, 1, 2].map((i) => (
-        <span key={i} style={{
-          width: "6px", height: "6px", borderRadius: "50%", background: "#334155",
-          display: "inline-block",
-          animation: "bounce 1.2s ease-in-out infinite",
-          animationDelay: `${i * 0.18}s`,
-        }} />
+        <span
+          key={i}
+          style={{
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            background: "var(--cyan-glow)",
+            display: "inline-block",
+            boxShadow: "0 0 6px var(--cyan-glow)",
+            animation: "bounce 1.2s ease-in-out infinite",
+            animationDelay: `${i * 0.18}s`,
+          }}
+        />
       ))}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────
-// Suggestions
-// ─────────────────────────────────────────────────────────
-
-const SUGGESTIONS = [
+const TERMINAL_SUGGESTIONS = [
+  "Run local diagnostic sweep",
+  "Write an async Python web scraper",
   "Explain quantum entanglement",
-  "Write a Python async web scraper",
-  "What is the Fermi paradox?",
-  "Explain REST vs GraphQL",
-  "Debug this: TypeError: Cannot read properties of undefined",
+  "Debug this React memory leak",
   "Summarize the French Revolution",
 ];
 
 // ─────────────────────────────────────────────────────────
-// Main App
+// Main App Component
 // ─────────────────────────────────────────────────────────
 
 const SESSION_ID = getSessionId();
 const BASE = "http://127.0.0.1:8000";
 
 export default function App() {
+  // ── Theme State: "dark" | "light" ────────────────────
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    return (localStorage.getItem("aegis_theme") as ThemeMode) || "dark";
+  });
+
+  // Apply theme to document root
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("aegis_theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === "dark" ? "light" : "dark"));
+  };
+
+  // ── View Mode: HUD vs TERMINAL ───────────────────────
+  const [viewMode, setViewMode] = useState<ViewMode>("HUD");
+
   const [message, setMessage]                   = useState("");
   const [chat, setChat]                         = useState<Message[]>(loadHistory);
-  const [loading, setLoading]                   = useState(false);        // waiting for first token
-  const [streaming, setStreaming]               = useState(false);        // tokens flowing
+  const [loading, setLoading]                   = useState(false);
+  const [streaming, setStreaming]               = useState(false);
   const [status, setStatus]                     = useState<BackendStatus>("checking");
   const [models, setModels]                     = useState<string[]>([]);
   const [activeModel, setActiveModel]           = useState("llama3");
@@ -421,7 +525,7 @@ export default function App() {
   });
   const [voiceError, setVoiceError]             = useState<string | null>(null);
 
-  // Refs for zero-latency synchronous access inside VAD & animation loops
+  // Refs for zero-latency access
   const voiceStateRef       = useRef<VoiceState>("IDLE");
   const voiceModeRef        = useRef(false);
   const audioCuesEnabledRef = useRef(audioCuesEnabled);
@@ -437,7 +541,7 @@ export default function App() {
   const audioChunksRef    = useRef<Blob[]>([]);
   const mediaStreamRef    = useRef<MediaStream | null>(null);
 
-  // Keep state refs in sync
+  // Sync refs
   useEffect(() => { voiceStateRef.current = voiceState; }, [voiceState]);
   useEffect(() => { voiceModeRef.current = voiceMode; }, [voiceMode]);
   useEffect(() => {
@@ -445,10 +549,10 @@ export default function App() {
     localStorage.setItem("aegis_audio_cues", audioCuesEnabled ? "true" : "false");
   }, [audioCuesEnabled]);
 
-  // ── Persist chat ──────────────────────────────────────
+  // Persist chat
   useEffect(() => { saveHistory(chat.filter(m => !m.streaming)); }, [chat]);
 
-  // ── Health polling ────────────────────────────────────
+  // Health polling
   useEffect(() => {
     const check = async () => {
       try {
@@ -456,15 +560,19 @@ export default function App() {
         if (r.ok) {
           const d = await r.json();
           setStatus(d.ollama ? "online" : "offline");
-        } else { setStatus("offline"); }
-      } catch { setStatus("offline"); }
+        } else {
+          setStatus("offline");
+        }
+      } catch {
+        setStatus("offline");
+      }
     };
     check();
     const t = setInterval(check, 15000);
     return () => clearInterval(t);
   }, []);
 
-  // ── Fetch models ──────────────────────────────────────
+  // Fetch models
   useEffect(() => {
     fetch(`${BASE}/models`)
       .then(r => r.json())
@@ -477,7 +585,7 @@ export default function App() {
       .catch(() => {});
   }, [status]);
 
-  // ── Smart auto-scroll ─────────────────────────────────
+  // Smart auto-scroll
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -485,25 +593,28 @@ export default function App() {
   }, []);
 
   useLayoutEffect(() => {
-    if (atBottomRef.current) {
+    if (atBottomRef.current && viewMode === "TERMINAL") {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [chat, loading]);
+  }, [chat, loading, viewMode]);
 
-  // ── State Transition Helper ───────────────────────────
+  // State Transition Helper
   const updateVoiceState = useCallback((nextState: VoiceState, errorMsg?: string) => {
     voiceStateRef.current = nextState;
     setVoiceState(nextState);
     if (nextState === "ERROR") {
-      setVoiceError(errorMsg || "Voice interaction encountered an error.");
+      setVoiceError(errorMsg || "Voice error encountered.");
     } else if (errorMsg === undefined) {
       setVoiceError(null);
     }
   }, []);
 
-  // ── Abort / Cancel ────────────────────────────────────
+  // Abort Stream & TTS
   const abort = useCallback(() => {
-    if (esRef.current) { esRef.current.close(); esRef.current = null; }
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
     ttsRef.current.cancel();
     setLoading(false);
     setStreaming(false);
@@ -515,7 +626,7 @@ export default function App() {
     }
   }, [updateVoiceState]);
 
-  // ── Media Stream Cleanup ──────────────────────────────
+  // Clean stream
   const cleanupStream = useCallback(() => {
     mediaStreamRef.current?.getTracks().forEach(track => track.stop());
     mediaStreamRef.current = null;
@@ -536,13 +647,16 @@ export default function App() {
     return "";
   };
 
-  // ── Send message / query LLM ──────────────────────────
+  // Send message
   const sendMessage = useCallback(async (text?: string, fromVoice = false) => {
     const userMessage = (text ?? message).trim();
     if (!userMessage || loading || streaming) return;
 
     const userMsg: Message = {
-      id: uuid(), sender: "user", text: userMessage, timestamp: Date.now(),
+      id: uuid(),
+      sender: "user",
+      text: userMessage,
+      timestamp: Date.now(),
     };
     const aiId = uuid();
 
@@ -552,7 +666,6 @@ export default function App() {
     atBottomRef.current = true;
     updateVoiceState("THINKING");
 
-    // Reset textarea height
     if (inputRef.current) inputRef.current.style.height = "auto";
 
     const url = `${BASE}/ask/stream?prompt=${encodeURIComponent(userMessage)}&session_id=${SESSION_ID}&model=${encodeURIComponent(activeModel)}`;
@@ -564,17 +677,16 @@ export default function App() {
 
     es.onmessage = (event) => {
       if (event.data === "[DONE]") {
-        es.close(); esRef.current = null;
+        es.close();
+        esRef.current = null;
         setStreaming(false);
         setLoading(false);
         setChat(prev => prev.map(m => m.id === aiId ? { ...m, streaming: false } : m));
 
-        // Speak response if voice was used or voice conversation mode is on
         const shouldSpeak = fromVoice || voiceModeRef.current;
         if (shouldSpeak && buffer.trim()) {
           updateVoiceState("SPEAKING");
           ttsRef.current.speak(buffer.trim(), () => {
-            // Conversational loop: return to LISTENING when speech ends
             if (voiceModeRef.current) {
               updateVoiceState("LISTENING");
             } else {
@@ -582,11 +694,8 @@ export default function App() {
             }
           });
         } else {
-          if (voiceModeRef.current) {
-            updateVoiceState("LISTENING");
-          } else {
-            updateVoiceState("IDLE");
-          }
+          if (voiceModeRef.current) updateVoiceState("LISTENING");
+          else updateVoiceState("IDLE");
         }
         return;
       }
@@ -594,7 +703,8 @@ export default function App() {
         const parsed = JSON.parse(event.data);
         if (parsed.error) {
           es.close();
-          setStreaming(false); setLoading(false);
+          setStreaming(false);
+          setLoading(false);
           setChat(prev => prev.map(m => m.id === aiId ? {
             ...m, text: `⚠ ${parsed.error}`, streaming: false
           } : m));
@@ -613,16 +723,19 @@ export default function App() {
         } else {
           setChat(prev => prev.map(m => m.id === aiId ? { ...m, text: buffer } : m));
         }
-      } catch { /* ignore parse errors */ }
+      } catch { /* ignore */ }
     };
 
     es.onerror = () => {
-      es.close(); esRef.current = null;
-      setLoading(false); setStreaming(false);
+      es.close();
+      esRef.current = null;
+      setLoading(false);
+      setStreaming(false);
       if (!gotFirstToken) {
         setChat(prev => [...prev, {
-          id: aiId, sender: "ai",
-          text: "⚠ Could not reach Aegis backend. Make sure the backend server is running.",
+          id: aiId,
+          sender: "ai",
+          text: "⚠ Could not reach Aegis backend. Make sure the uvicorn server is running on port 8000.",
           timestamp: Date.now(),
         }]);
       } else {
@@ -633,7 +746,7 @@ export default function App() {
     };
   }, [message, loading, streaming, activeModel, updateVoiceState]);
 
-  // ── Faster-Whisper Transcription ──────────────────────
+  // Faster-Whisper Transcribe
   const transcribeAndSend = useCallback(async (blob: Blob, mimeType: string) => {
     if (blob.size === 0) {
       if (voiceModeRef.current) updateVoiceState("LISTENING");
@@ -654,7 +767,7 @@ export default function App() {
       });
 
       if (!res.ok) {
-        console.error("Voice transcription failed:", res.status, res.statusText);
+        console.error("Transcription failed:", res.status, res.statusText);
         playAudioCue("error", audioCuesEnabledRef.current);
         updateVoiceState("ERROR", "Couldn't transcribe audio.");
         setTimeout(() => {
@@ -670,15 +783,11 @@ export default function App() {
       if (transcript) {
         sendMessage(transcript, true);
       } else {
-        // Empty audio/noise -> return smoothly to listening
-        if (voiceModeRef.current) {
-          updateVoiceState("LISTENING");
-        } else {
-          updateVoiceState("IDLE");
-        }
+        if (voiceModeRef.current) updateVoiceState("LISTENING");
+        else updateVoiceState("IDLE");
       }
     } catch (err) {
-      console.error("Voice transcription error:", err);
+      console.error("Transcription network error:", err);
       playAudioCue("error", audioCuesEnabledRef.current);
       updateVoiceState("ERROR", "Network error during transcription.");
       setTimeout(() => {
@@ -688,7 +797,7 @@ export default function App() {
     }
   }, [sendMessage, updateVoiceState]);
 
-  // ── MediaRecorder control ─────────────────────────────
+  // MediaRecorder handlers
   const startMediaRecorder = useCallback((stream: MediaStream) => {
     try {
       const mimeType = pickMimeType();
@@ -719,14 +828,14 @@ export default function App() {
       recorder.onerror = (e) => {
         console.error("MediaRecorder error:", e);
         playAudioCue("error", audioCuesEnabledRef.current);
-        updateVoiceState("ERROR", "Microphone recording error.");
+        updateVoiceState("ERROR", "Recording error.");
       };
 
       mediaRecorderRef.current = recorder;
       recorder.start();
     } catch (err) {
       console.error("Failed to start MediaRecorder:", err);
-      updateVoiceState("ERROR", "Failed to start recording.");
+      updateVoiceState("ERROR", "Failed to start recorder.");
     }
   }, [transcribeAndSend, updateVoiceState]);
 
@@ -738,7 +847,7 @@ export default function App() {
     mediaRecorderRef.current = null;
   }, []);
 
-  // ── Wire VAD Callbacks ────────────────────────────────
+  // VAD Listeners
   useEffect(() => {
     const vad = vadRef.current;
 
@@ -765,7 +874,6 @@ export default function App() {
 
     vad.onBargeIn = () => {
       if (voiceStateRef.current === "SPEAKING" || voiceStateRef.current === "THINKING") {
-        // Barge-in: user spoke while Aegis was outputting
         ttsRef.current.cancel();
         if (esRef.current) {
           esRef.current.close();
@@ -776,7 +884,6 @@ export default function App() {
         playAudioCue("interrupted", audioCuesEnabledRef.current);
         updateVoiceState("INTERRUPTED");
 
-        // Immediately start capturing the new prompt
         if (mediaStreamRef.current) {
           setTimeout(() => {
             updateVoiceState("RECORDING");
@@ -787,7 +894,7 @@ export default function App() {
     };
   }, [updateVoiceState, startMediaRecorder, stopMediaRecorder]);
 
-  // ── Voice Conversation Mode: ON/OFF ───────────────────
+  // Toggle Voice Conversation Mode
   const activateVoiceMode = useCallback(async () => {
     try {
       ttsRef.current.cancel();
@@ -801,9 +908,9 @@ export default function App() {
       vadRef.current.start(stream, () => voiceStateRef.current);
       playAudioCue("activated", audioCuesEnabledRef.current);
     } catch (err) {
-      console.error("Microphone access denied:", err);
+      console.error("Microphone denied:", err);
       playAudioCue("error", audioCuesEnabledRef.current);
-      updateVoiceState("ERROR", "Microphone access denied. Check system permissions.");
+      updateVoiceState("ERROR", "Microphone access denied.");
       setTimeout(() => updateVoiceState("IDLE"), 3000);
     }
   }, [updateVoiceState]);
@@ -821,14 +928,11 @@ export default function App() {
   }, [cleanupStream, stopMediaRecorder, updateVoiceState]);
 
   const toggleVoiceMode = useCallback(() => {
-    if (voiceMode) {
-      deactivateVoiceMode();
-    } else {
-      activateVoiceMode();
-    }
+    if (voiceMode) deactivateVoiceMode();
+    else activateVoiceMode();
   }, [voiceMode, activateVoiceMode, deactivateVoiceMode]);
 
-  // ── Manual Push-To-Talk (when voiceMode is off) ────────
+  // Manual Push-to-Talk
   const startManualRecording = useCallback(async () => {
     if (voiceState !== "IDLE") return;
     try {
@@ -838,13 +942,12 @@ export default function App() {
       updateVoiceState("RECORDING");
       playAudioCue("speech_start", audioCuesEnabledRef.current);
 
-      // Start VAD to auto-stop on silence in push-to-talk mode
       vadRef.current.start(stream, () => voiceStateRef.current);
       startMediaRecorder(stream);
     } catch (err) {
       console.error("Mic error:", err);
       playAudioCue("error", audioCuesEnabledRef.current);
-      updateVoiceState("ERROR", "Microphone access denied.");
+      updateVoiceState("ERROR", "Microphone denied.");
       setTimeout(() => updateVoiceState("IDLE"), 2500);
     }
   }, [voiceState, startMediaRecorder, updateVoiceState]);
@@ -859,14 +962,10 @@ export default function App() {
   }, [voiceState, cleanupStream, stopMediaRecorder]);
 
   const toggleManualRecording = useCallback(() => {
-    if (voiceState === "RECORDING") {
-      stopManualRecording();
-    } else if (voiceState === "IDLE") {
-      startManualRecording();
-    }
+    if (voiceState === "RECORDING") stopManualRecording();
+    else if (voiceState === "IDLE") startManualRecording();
   }, [voiceState, startManualRecording, stopManualRecording]);
 
-  // ── TTS Bubble Controls ───────────────────────────────
   const handleBubbleSpeak = (text: string) => {
     if (ttsRef.current.isSpeaking()) {
       ttsRef.current.cancel();
@@ -880,9 +979,13 @@ export default function App() {
     }
   };
 
-  // ── Keyboard shortcuts ────────────────────────────────
+  // Keyboard Shortcuts (Tab=Toggle View Mode, Esc=Abort, Ctrl+M=Voice, Ctrl+L=Clear)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        setViewMode(prev => (prev === "HUD" ? "TERMINAL" : "HUD"));
+      }
       if (e.key === "Escape") {
         if (loading || streaming || voiceState === "SPEAKING") {
           abort();
@@ -894,7 +997,7 @@ export default function App() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "l") {
         e.preventDefault();
-        promptClear();
+        setShowClearConfirm(true);
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "m") {
         e.preventDefault();
@@ -905,7 +1008,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [loading, streaming, voiceState, voiceMode, abort, stopManualRecording, deactivateVoiceMode, toggleVoiceMode]);
 
-  // Cleanup on unmount
+  // Clean on unmount
   useEffect(() => {
     return () => {
       vadRef.current.stop();
@@ -917,7 +1020,7 @@ export default function App() {
     };
   }, [cleanupStream]);
 
-  // ── Regenerate last response ──────────────────────────
+  // Regenerate
   const regenerate = useCallback(() => {
     const lastUser = [...chat].reverse().find(m => m.sender === "user");
     if (!lastUser) return;
@@ -930,7 +1033,7 @@ export default function App() {
     setTimeout(() => sendMessage(lastUser.text), 50);
   }, [chat, sendMessage]);
 
-  // ── Copy message ──────────────────────────────────────
+  // Copy
   const copyMsg = useCallback((text: string) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(text);
@@ -938,8 +1041,7 @@ export default function App() {
     });
   }, []);
 
-  // ── Clear chat ────────────────────────────────────────
-  const promptClear = () => setShowClearConfirm(true);
+  // Clear
   const confirmClear = async () => {
     abort();
     setChat([]);
@@ -948,7 +1050,6 @@ export default function App() {
     try { await fetch(`${BASE}/history/${SESSION_ID}`, { method: "DELETE" }); } catch { /* offline */ }
   };
 
-  // ── Input handlers ────────────────────────────────────
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -965,597 +1066,407 @@ export default function App() {
   const isActive = loading || streaming;
   const isSpeaking = voiceState === "SPEAKING" || ttsRef.current.isSpeaking();
 
-  const statusColor = status === "online" ? "#22c55e" : status === "offline" ? "#ef4444" : "#f59e0b";
-  const statusLabel = status === "online" ? "online" : status === "offline" ? "offline" : "checking";
+  const lastUserMsg = [...chat].reverse().find(m => m.sender === "user")?.text;
+  const lastAiMsg = [...chat].reverse().find(m => m.sender === "ai")?.text;
+
+  const statusColor = status === "online" ? "var(--green-online)" : status === "offline" ? "var(--red-hazard)" : "var(--amber-warn)";
+  const statusLabel = status === "online" ? "ONLINE" : status === "offline" ? "OFFLINE" : "CHECKING";
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { width: 3px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1a2e4a; border-radius: 3px; }
-        textarea { resize: none; font-family: inherit; }
-        textarea:focus { outline: none; }
-        button { font-family: inherit; }
-
-        @keyframes bounce {
-          0%,80%,100% { transform: scale(0.9); opacity: 0.35; }
-          40%          { transform: scale(1.3);  opacity: 1; }
-        }
-        @keyframes fadeSlideIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes pulse {
-          0%,100% { opacity: 1; }
-          50%      { opacity: 0.35; }
-        }
-        @keyframes blink {
-          0%,100% { opacity: 1; }
-          50%      { opacity: 0; }
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes ripple {
-          0% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4); }
-          70% { box-shadow: 0 0 0 8px rgba(6, 182, 212, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
-        }
-
-        .nav-item {
-          display: flex; align-items: center; gap: 10px;
-          padding: 8px 12px; border-radius: 8px;
-          font-size: 13px; color: #334155; cursor: pointer;
-          transition: background 0.12s, color 0.12s;
-          user-select: none;
-        }
-        .nav-item:hover  { background: #07192e; color: #64748b; }
-        .nav-item.active { background: #0a2040; color: #60a5fa; }
-
-        .chip {
-          background: #060f1c; border: 1px solid #1a2e4a; color: #4a7ab5;
-          font-size: 12px; padding: 7px 13px; border-radius: 18px;
-          cursor: pointer; transition: all 0.14s; white-space: nowrap;
-          font-family: 'DM Sans', sans-serif;
-        }
-        .chip:hover { background: #0a1f38; border-color: #2563eb; color: #93c5fd; }
-
-        .send-btn {
-          background: #1d4ed8; border: none; color: white;
-          width: 36px; height: 36px; border-radius: 9px;
-          cursor: pointer; display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0; transition: background 0.13s, transform 0.1s;
-        }
-        .send-btn:hover   { background: #1e40af; }
-        .send-btn:active  { transform: scale(0.92); }
-        .send-btn:disabled { background: #0a1628; cursor: not-allowed; opacity: 0.5; }
-
-        .abort-btn {
-          background: #1a0a0a; border: 1px solid #4b1111; color: #ef4444;
-          width: 36px; height: 36px; border-radius: 9px;
-          cursor: pointer; display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0; transition: background 0.13s;
-          font-size: 13px;
-        }
-        .abort-btn:hover { background: #250d0d; }
-
-        .mic-btn {
-          background: #1d4ed8; border: none; color: white;
-          width: 36px; height: 36px; border-radius: 9px;
-          cursor: pointer; display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0; transition: background 0.13s, transform 0.1s;
-        }
-        .mic-btn:hover { background: #1e40af; }
-        .mic-btn:active { transform: scale(0.92); }
-        .mic-btn:disabled { background: #0a1628; cursor: not-allowed; opacity: 0.5; }
-
-        .active-mic-btn {
-          background: #ef4444 !important;
-          animation: pulse 1.1s ease-in-out infinite;
-        }
-
-        .icon-btn {
-          background: none; border: 1px solid transparent; color: #475569;
-          padding: 5px 10px; border-radius: 6px; cursor: pointer;
-          font-size: 11.5px; font-family: 'DM Mono', monospace;
-          transition: color 0.12s, border-color 0.12s, background 0.12s;
-        }
-        .icon-btn:hover { color: #60a5fa; border-color: #1e3a5f; background: #060f1c; }
-
-        .voice-mode-toggle {
-          display: flex; align-items: center; gap: 7px;
-          padding: 6px 12px; border-radius: 20px;
-          font-size: 11.5px; font-family: 'DM Mono', monospace;
-          cursor: pointer; transition: all 0.15s ease;
-          border: 1px solid #1a2e4a;
-        }
-        .voice-mode-toggle.active {
-          background: linear-gradient(135deg, #0e3052, #0d3b66);
-          border-color: #06b6d4;
-          color: #67e8f9;
-          box-shadow: 0 0 14px rgba(6, 182, 212, 0.25);
-          animation: ripple 2.5s infinite;
-        }
-        .voice-mode-toggle.inactive {
-          background: #060f1c;
-          border-color: #1e293b;
-          color: #64748b;
-        }
-        .voice-mode-toggle.inactive:hover {
-          border-color: #3b82f6;
-          color: #93c5fd;
-        }
-
-        .model-select {
-          background: #060f1c; border: 1px solid #1a2e4a; color: #4a7ab5;
-          font-size: 11px; padding: 4px 8px; border-radius: 6px;
-          cursor: pointer; font-family: 'DM Mono', monospace;
-          appearance: none; outline: none;
-        }
-        .model-select:hover { border-color: #2563eb; }
-
-        .overlay {
-          position: fixed; inset: 0; background: rgba(0,0,0,0.75);
-          display: flex; align-items: center; justify-content: center;
-          z-index: 100; animation: fadeSlideIn 0.15s ease;
-        }
-        .dialog {
-          background: #060f1c; border: 1px solid #1a2e4a;
-          border-radius: 14px; padding: 24px 28px;
-          display: flex; flex-direction: column; gap: 16px;
-          min-width: 300px;
-        }
-      `}</style>
-
       {/* ── Clear Confirm Dialog ─────────────────────── */}
       {showClearConfirm && (
         <div className="overlay" onClick={() => setShowClearConfirm(false)}>
-          <div className="dialog" onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: "15px", fontWeight: 600, color: "#e2e8f0", fontFamily: "'DM Sans', sans-serif" }}>
-              Clear conversation?
+          <div className="dialog hud-corner-box" onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--cyan-glow)", fontFamily: "'Orbitron', monospace", letterSpacing: "1px" }}>
+              CLEAR SESSION DATA?
             </div>
-            <div style={{ fontSize: "13px", color: "#64748b", fontFamily: "'DM Sans', sans-serif" }}>
-              This will delete all messages and reset Aegis's memory for this session.
+            <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontFamily: "'Outfit', sans-serif" }}>
+              This will wipe active message memory and reset Aegis's local session context.
             </div>
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-              <button className="icon-btn" onClick={() => setShowClearConfirm(false)}>cancel</button>
-              <button onClick={confirmClear} style={{
-                background: "#1a0a0a", border: "1px solid #4b1111", color: "#ef4444",
-                padding: "6px 16px", borderRadius: "8px", cursor: "pointer",
-                fontSize: "12px", fontFamily: "'DM Mono', monospace",
-              }}>clear</button>
+              <button className="hud-btn" onClick={() => setShowClearConfirm(false)}>CANCEL</button>
+              <button className="hud-btn hud-btn-danger" onClick={confirmClear}>PURGE MEMORY</button>
             </div>
           </div>
         </div>
       )}
 
-      <div style={{
-        height: "100vh", background: "#020c1b", color: "white",
-        display: "flex", fontFamily: "'DM Sans', sans-serif", overflow: "hidden",
-      }}>
-
-        {/* ── Sidebar ──────────────────────────────── */}
-        <div style={{
-          width: "230px", background: "#030d1a",
-          borderRight: "1px solid #0a1e30",
-          display: "flex", flexDirection: "column", flexShrink: 0,
-        }}>
-          {/* Logo */}
-          <div style={{ padding: "20px 18px 16px", borderBottom: "1px solid #0a1e30" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <div style={{
-                width: "34px", height: "34px", borderRadius: "10px",
-                background: "linear-gradient(135deg, #1e3a8a, #3b82f6)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "14px", fontWeight: "700", color: "white",
-                fontFamily: "'DM Mono', monospace",
-                boxShadow: "0 0 16px rgba(59,130,246,0.3)",
-              }}>Æ</div>
-              <div>
-                <div style={{ fontSize: "15px", fontWeight: 600, color: "#e2e8f0", letterSpacing: "-0.3px" }}>
-                  Aegis
-                </div>
-                <div style={{ fontSize: "10px", color: "#38bdf8", letterSpacing: "1px", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>
-                  Assistant
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Voice Mode Quick Toggle */}
-          <div style={{ padding: "12px 14px", borderBottom: "1px solid #0a1e30" }}>
-            <button
-              onClick={toggleVoiceMode}
-              className={`voice-mode-toggle ${voiceMode ? "active" : "inactive"}`}
-              style={{ width: "100%", justifyContent: "center" }}
-              title="Toggle natural hands-free voice conversation mode (Ctrl+M)"
-            >
-              <span>{voiceMode ? "🎙 Voice Active" : "🎙 Start Voice Mode"}</span>
-            </button>
-          </div>
-
-          {/* Nav */}
-          <div style={{ padding: "12px 8px", flex: 1 }}>
-            <div style={{ fontSize: "10px", color: "#1e3a5f", letterSpacing: "0.8px", textTransform: "uppercase", padding: "0 10px 8px", fontWeight: 600 }}>
-              workspace
-            </div>
-            {[
-              { label: "Chat",     icon: "◈", active: true  },
-              { label: "History",  icon: "≡", active: false },
-              { label: "Settings", icon: "⌘", active: false },
-            ].map(({ label, icon, active }) => (
-              <div key={label} className={`nav-item${active ? " active" : ""}`}>
-                <span style={{ fontSize: "14px", fontFamily: "'DM Mono', monospace" }}>{icon}</span>
-                {label}
-              </div>
-            ))}
-          </div>
-
-          {/* Audio Cues Toggle */}
-          <div style={{ padding: "10px 18px", borderTop: "1px solid #0a1e30", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: "10.5px", color: "#475569", fontFamily: "'DM Mono', monospace" }}>
-              Audio cues
-            </span>
-            <button
-              onClick={() => setAudioCuesEnabled(prev => !prev)}
+      <div
+        style={{
+          width: "100vw",
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          background: "var(--bg-deep)",
+          color: "var(--text-main)",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* ── Top Futuristic HUD Bar ──────────────────────── */}
+        <header
+          style={{
+            height: "56px",
+            borderBottom: "1px solid var(--cyan-border)",
+            background: "var(--bg-header)",
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 24px",
+            zIndex: 10,
+            flexShrink: 0,
+          }}
+        >
+          {/* Logo & System Badge */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
               style={{
-                background: audioCuesEnabled ? "#0a2040" : "#060f1c",
-                border: `1px solid ${audioCuesEnabled ? "#1e3a5f" : "#1a2e4a"}`,
-                color: audioCuesEnabled ? "#60a5fa" : "#475569",
-                fontSize: "10.5px", padding: "2px 8px", borderRadius: "5px",
-                cursor: "pointer", fontFamily: "'DM Mono', monospace",
+                width: "32px",
+                height: "32px",
+                borderRadius: "8px",
+                background: "linear-gradient(135deg, var(--cyan-dim), var(--cyan-glow))",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontFamily: "'Orbitron', monospace",
+                fontWeight: 800,
+                fontSize: "14px",
+                color: "#fff",
+                boxShadow: "0 0 14px var(--shadow-glow)",
               }}
             >
-              {audioCuesEnabled ? "ON" : "OFF"}
+              Æ
+            </div>
+            <div>
+              <div style={{ fontFamily: "'Orbitron', monospace", fontSize: "14px", fontWeight: 700, letterSpacing: "1.5px", color: "var(--text-main)" }}>
+                AEGIS <span style={{ color: "var(--cyan-glow)", fontSize: "10px", letterSpacing: "1px" }}>// J.A.R.V.I.S.</span>
+              </div>
+              <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: "10px", color: "var(--text-muted)", letterSpacing: "1px", textTransform: "uppercase" }}>
+                LOCAL SECURE DESKTOP ASSISTANT
+              </div>
+            </div>
+          </div>
+
+          {/* Center Mode Switcher Tabs */}
+          <div
+            style={{
+              display: "flex",
+              background: "var(--cyan-hover)",
+              border: "1px solid var(--cyan-border)",
+              borderRadius: "6px",
+              padding: "3px",
+            }}
+          >
+            <button
+              onClick={() => setViewMode("HUD")}
+              className={`hud-btn ${viewMode === "HUD" ? "active" : ""}`}
+              style={{
+                padding: "5px 14px",
+                borderRadius: "4px",
+                fontSize: "11px",
+                background: viewMode === "HUD" ? "var(--cyan-border-active)" : "transparent",
+                border: "none",
+              }}
+            >
+              ◈ HOLOGRAPHIC HUD
+            </button>
+            <button
+              onClick={() => setViewMode("TERMINAL")}
+              className={`hud-btn ${viewMode === "TERMINAL" ? "active" : ""}`}
+              style={{
+                padding: "5px 14px",
+                borderRadius: "4px",
+                fontSize: "11px",
+                background: viewMode === "TERMINAL" ? "var(--cyan-border-active)" : "transparent",
+                border: "none",
+              }}
+            >
+              ≡ COMMAND TERMINAL
             </button>
           </div>
 
-          {/* Model selector */}
-          {models.length > 0 && (
-            <div style={{ padding: "10px 18px", borderTop: "1px solid #0a1e30" }}>
-              <div style={{ fontSize: "9.5px", color: "#334155", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: "6px" }}>
-                model
-              </div>
+          {/* Right Header Action Controls */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            {/* Theme Toggle (Light/Dark) */}
+            <button
+              onClick={toggleTheme}
+              className="hud-btn"
+              style={{ padding: "5px 10px", fontSize: "11px" }}
+              title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
+            >
+              <span>{theme === "dark" ? "☀️ LIGHT" : "🌙 DARK"}</span>
+            </button>
+
+            {/* Voice Mode Toggle */}
+            <button
+              onClick={toggleVoiceMode}
+              className={`hud-btn ${voiceMode ? "active" : ""}`}
+              style={{ padding: "5px 12px", fontSize: "11px" }}
+              title="Toggle Hands-Free Voice Conversation Mode (Ctrl+M)"
+            >
+              <span>{voiceMode ? "● VOICE ACTIVE" : "🎙 VOICE MODE"}</span>
+            </button>
+
+            {/* Model Select */}
+            {models.length > 0 && (
               <select
                 className="model-select"
                 value={activeModel}
                 onChange={e => setActiveModel(e.target.value)}
-                style={{ width: "100%" }}
+                style={{
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--cyan-border)",
+                  color: "var(--text-cyan)",
+                  padding: "4px 8px",
+                  fontSize: "11px",
+                  fontFamily: "'DM Mono', monospace",
+                  borderRadius: "4px",
+                  outline: "none",
+                }}
               >
                 {models.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
+            )}
+
+            {/* Clear Button */}
+            {chat.length > 0 && (
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                className="hud-btn"
+                style={{ padding: "5px 10px", fontSize: "11px" }}
+                title="Clear conversation memory (Ctrl+L)"
+              >
+                PURGE
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* ── Main View Switcher ──────────────────────────── */}
+        <main style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+          {viewMode === "HUD" ? (
+            <JarvisHudView
+              voiceState={voiceState}
+              audioEnergy={audioEnergy}
+              isVoiceMode={voiceMode}
+              activeModel={activeModel}
+              backendStatus={status}
+              messageCount={chat.length}
+              audioCuesEnabled={audioCuesEnabled}
+              theme={theme}
+              lastUserMessage={lastUserMsg}
+              lastAiMessage={lastAiMsg}
+              isStreaming={streaming}
+              isLoading={loading}
+              onToggleVoiceMode={toggleVoiceMode}
+              onToggleAudioCues={() => setAudioCuesEnabled(prev => !prev)}
+              onSendPrompt={sendMessage}
+              onAbort={abort}
+              onSwitchToTerminal={() => setViewMode("TERMINAL")}
+            />
+          ) : (
+            /* ── Tactical Command Terminal Mode ────────────── */
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                position: "relative",
+              }}
+            >
+              <div className="hud-grid-background" />
+
+              {/* Chat Message Stream */}
+              <div
+                ref={scrollRef}
+                onScroll={onScroll}
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  padding: "24px 32px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                  zIndex: 2,
+                }}
+              >
+                {isEmpty && (
+                  <div
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "16px",
+                      marginTop: "60px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "64px",
+                        height: "64px",
+                        borderRadius: "16px",
+                        background: "linear-gradient(135deg, var(--cyan-dim), var(--cyan-glow))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "26px",
+                        fontWeight: 800,
+                        color: "#fff",
+                        fontFamily: "'Orbitron', monospace",
+                        boxShadow: "0 0 32px var(--shadow-glow)",
+                      }}
+                    >
+                      Æ
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontFamily: "'Orbitron', monospace", fontSize: "18px", fontWeight: 700, color: "var(--text-main)", letterSpacing: "1px" }}>
+                        TACTICAL COMMAND INTERFACE
+                      </div>
+                      <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
+                        Neural engine {activeModel} ready · Fully local & airgapped
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", maxWidth: "560px" }}>
+                      {TERMINAL_SUGGESTIONS.map(s => (
+                        <button
+                          key={s}
+                          onClick={() => sendMessage(s)}
+                          className="hud-btn"
+                          style={{ fontSize: "11px", padding: "6px 14px", borderRadius: "18px" }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {chat.map((msg, idx) => (
+                  <MessageBubble
+                    key={msg.id}
+                    msg={msg}
+                    onCopy={copyMsg}
+                    onRegenerate={regenerate}
+                    onSpeak={msg.sender === "ai" ? () => handleBubbleSpeak(msg.text) : undefined}
+                    isSpeaking={isSpeaking}
+                    isLast={idx === chat.length - 1}
+                  />
+                ))}
+
+                {loading && !streaming && (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                    <div
+                      style={{
+                        width: "30px",
+                        height: "30px",
+                        borderRadius: "8px",
+                        background: "linear-gradient(135deg, var(--cyan-dim), var(--cyan-glow))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "12px",
+                        fontWeight: "800",
+                        color: "#fff",
+                        fontFamily: "'Orbitron', monospace",
+                      }}
+                    >
+                      Æ
+                    </div>
+                    <div className="hud-corner-box" style={{ padding: "10px 16px", borderRadius: "4px" }}>
+                      <TypingDots />
+                    </div>
+                  </div>
+                )}
+
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Input Action Bar */}
+              <div
+                style={{
+                  padding: "14px 28px 20px",
+                  borderTop: "1px solid var(--cyan-border)",
+                  background: "var(--bg-header)",
+                  backdropFilter: "blur(14px)",
+                  WebkitBackdropFilter: "blur(14px)",
+                  zIndex: 3,
+                }}
+              >
+                <div
+                  className="hud-corner-box"
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-end",
+                    gap: "10px",
+                    padding: "10px 14px",
+                    border: `1px solid ${voiceMode ? "var(--cyan-glow)" : "var(--cyan-border)"}`,
+                    boxShadow: voiceMode ? "0 0 16px var(--shadow-glow)" : "none",
+                  }}
+                >
+                  <textarea
+                    ref={inputRef}
+                    value={message}
+                    onChange={e => { setMessage(e.target.value); resizeTextarea(e.target); }}
+                    onKeyDown={handleKeyDown}
+                    placeholder={
+                      voiceMode
+                        ? "Voice Conversation Mode active · speak freely or enter command…"
+                        : "Enter command or message…  (⏎ send · ⇧⏎ newline · ⎋ abort · Tab HUD)"
+                    }
+                    rows={1}
+                    style={{
+                      flex: 1,
+                      background: "transparent",
+                      color: "var(--text-main)",
+                      border: "none",
+                      fontSize: "14px",
+                      lineHeight: "1.55",
+                      maxHeight: "160px",
+                      overflowY: "auto",
+                      fontFamily: "'Outfit', sans-serif",
+                    }}
+                  />
+
+                  {isActive || isSpeaking ? (
+                    <button onClick={abort} className="hud-btn hud-btn-danger" style={{ padding: "6px 12px" }}>
+                      ■ STOP
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        className={`hud-btn ${voiceState === "RECORDING" ? "hud-btn-danger" : ""}`}
+                        onClick={voiceMode ? toggleVoiceMode : toggleManualRecording}
+                        style={{ padding: "6px 12px" }}
+                        title={voiceMode ? "Voice Mode Active" : "Push to talk"}
+                      >
+                        {voiceState === "RECORDING" ? "● RECORDING" : "🎤 VOICE"}
+                      </button>
+                      <button
+                        onClick={() => sendMessage()}
+                        disabled={!message.trim()}
+                        className="hud-btn"
+                        style={{ padding: "6px 12px" }}
+                      >
+                        SEND ↵
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px", fontSize: "10px", color: "var(--text-muted)", fontFamily: "'DM Mono', monospace" }}>
+                  <span>AEGIS PROTOCOL 01 // PRESS TAB TO TOGGLE HOLOGRAPHIC HUD</span>
+                  <span>{message.length > 0 ? `${message.length} CHARS` : "READY"}</span>
+                </div>
+              </div>
             </div>
           )}
-
-          {/* Status */}
-          <div style={{
-            padding: "14px 18px", borderTop: "1px solid #0a1e30",
-            display: "flex", alignItems: "center", gap: "8px",
-          }}>
-            <span style={{
-              width: "6px", height: "6px", borderRadius: "50%",
-              background: statusColor, display: "inline-block", flexShrink: 0,
-              animation: status === "checking" ? "pulse 1s ease-in-out infinite" : status === "online" ? "pulse 3s ease-in-out infinite" : "none",
-            }} />
-            <span style={{ fontSize: "11px", color: "#334155", fontFamily: "'DM Mono', monospace" }}>
-              {statusLabel}
-            </span>
-          </div>
-        </div>
-
-        {/* ── Main area ─────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-
-          {/* Header */}
-          <div style={{
-            padding: "0 24px", height: "56px",
-            borderBottom: "1px solid #0a1e30",
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            flexShrink: 0,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <span style={{ fontSize: "15px", fontWeight: 600, color: "#c7d9f0", letterSpacing: "-0.2px" }}>
-                Aegis AI
-              </span>
-
-              {/* ── Phase 3 Voice State Visual Indicator ── */}
-              {voiceState === "LISTENING" && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "6px",
-                  fontSize: "11px", color: "#22d3ee", background: "#041d26",
-                  padding: "3px 10px", borderRadius: "20px", border: "1px solid #0891b2",
-                  fontFamily: "'DM Mono', monospace", animation: "fadeSlideIn 0.2s ease",
-                }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22d3ee", animation: "pulse 1.2s infinite" }} />
-                  Listening…
-                </div>
-              )}
-
-              {voiceState === "RECORDING" && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "8px",
-                  fontSize: "11px", color: "#f87171", background: "#1f0a0a",
-                  padding: "3px 12px", borderRadius: "20px", border: "1px solid #dc2626",
-                  fontFamily: "'DM Mono', monospace", animation: "fadeSlideIn 0.2s ease",
-                }}>
-                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#ef4444", animation: "pulse 0.8s infinite" }} />
-                  <span>Listening to you…</span>
-                  {/* Real-time audio waveform meter */}
-                  <div style={{ display: "flex", gap: "2px", alignItems: "center", height: "14px" }}>
-                    {[0.5, 0.8, 1.0, 0.7, 0.4].map((mult, idx) => (
-                      <span
-                        key={idx}
-                        style={{
-                          width: "2.5px",
-                          height: `${Math.max(3, Math.min(14, audioEnergy * 16 * mult))}px`,
-                          backgroundColor: "#ef4444",
-                          borderRadius: "1px",
-                          transition: "height 0.05s ease",
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {voiceState === "TRANSCRIBING" && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "6px",
-                  fontSize: "11px", color: "#fbbf24", background: "#1c1404",
-                  padding: "3px 10px", borderRadius: "20px", border: "1px solid #d97706",
-                  fontFamily: "'DM Mono', monospace", animation: "pulse 1.3s infinite",
-                }}>
-                  📝 Understanding…
-                </div>
-              )}
-
-              {voiceState === "THINKING" && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "6px",
-                  fontSize: "11px", color: "#60a5fa", background: "#06152d",
-                  padding: "3px 10px", borderRadius: "20px", border: "1px solid #2563eb",
-                  fontFamily: "'DM Mono', monospace", animation: "pulse 1.3s infinite",
-                }}>
-                  ◈ Thinking…
-                </div>
-              )}
-
-              {voiceState === "SPEAKING" && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "8px",
-                  fontSize: "11px", color: "#38bdf8", background: "#04192b",
-                  padding: "3px 10px", borderRadius: "20px", border: "1px solid #0284c7",
-                  fontFamily: "'DM Mono', monospace", animation: "fadeSlideIn 0.2s ease",
-                }}>
-                  <span>🔊 Speaking…</span>
-                  <button
-                    onClick={abort}
-                    style={{
-                      background: "#1e0b0b", border: "1px solid #7f1d1d", color: "#f87171",
-                      fontSize: "10px", padding: "1px 6px", borderRadius: "4px", cursor: "pointer",
-                    }}
-                    title="Interrupt Aegis (Esc)"
-                  >
-                    ■ Stop
-                  </button>
-                </div>
-              )}
-
-              {voiceState === "INTERRUPTED" && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "6px",
-                  fontSize: "11px", color: "#fb923c", background: "#1c0d02",
-                  padding: "3px 10px", borderRadius: "20px", border: "1px solid #ea580c",
-                  fontFamily: "'DM Mono', monospace", animation: "fadeSlideIn 0.2s ease",
-                }}>
-                  ⚡ Interrupted
-                </div>
-              )}
-
-              {voiceState === "ERROR" && voiceError && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "6px",
-                  fontSize: "11px", color: "#f87171", background: "#1a0808",
-                  padding: "3px 10px", borderRadius: "20px", border: "1px solid #991b1b",
-                  fontFamily: "'DM Mono', monospace",
-                }}>
-                  ⚠ {voiceError}
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <button
-                onClick={toggleVoiceMode}
-                className={`voice-mode-toggle ${voiceMode ? "active" : "inactive"}`}
-                title="Toggle continuous Voice Conversation Mode (Ctrl+M)"
-              >
-                <span>{voiceMode ? "🎙 Voice Mode: ON" : "🎙 Voice Mode: OFF"}</span>
-              </button>
-
-              <span style={{ fontSize: "11px", color: "#334155", fontFamily: "'DM Mono', monospace" }}>
-                {chat.length > 0 ? `${Math.ceil(chat.filter(m=>m.sender==="user").length)} msg${chat.filter(m=>m.sender==="user").length !== 1 ? "s" : ""}` : "new session"}
-              </span>
-              {chat.length > 0 && (
-                <button className="icon-btn" onClick={promptClear} title="Clear conversation (Ctrl+L)">
-                  clear
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Chat message stream */}
-          <div
-            ref={scrollRef}
-            onScroll={onScroll}
-            style={{
-              flex: 1, overflowY: "auto",
-              padding: "24px 28px",
-              display: "flex", flexDirection: "column", gap: "16px",
-            }}
-          >
-            {/* Empty state */}
-            {isEmpty && (
-              <div style={{
-                flex: 1, display: "flex", flexDirection: "column",
-                alignItems: "center", justifyContent: "center",
-                gap: "18px", marginTop: "80px",
-                animation: "fadeSlideIn 0.4s ease forwards",
-              }}>
-                <div style={{
-                  width: "60px", height: "60px", borderRadius: "18px",
-                  background: "linear-gradient(145deg, #0d2258, #1d4ed8)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "26px", fontWeight: "700", color: "white",
-                  fontFamily: "'DM Mono', monospace",
-                  boxShadow: "0 0 48px rgba(29,78,216,0.25)",
-                }}>Æ</div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: "19px", fontWeight: 600, color: "#c7d9f0", marginBottom: "6px" }}>
-                    How can I help you today?
-                  </div>
-                  <div style={{ fontSize: "13px", color: "#475569" }}>
-                    Powered by {activeModel} · local-first intelligence
-                  </div>
-                </div>
-                <div style={{
-                  display: "flex", flexWrap: "wrap", gap: "8px",
-                  justifyContent: "center", maxWidth: "520px", marginTop: "4px",
-                }}>
-                  {SUGGESTIONS.map(s => (
-                    <button key={s} className="chip" onClick={() => sendMessage(s)}>{s}</button>
-                  ))}
-                </div>
-                <div style={{ fontSize: "11px", color: "#1e3a5f", fontFamily: "'DM Mono', monospace", marginTop: "4px" }}>
-                  ↵ send  ·  ⎋ abort/stop  ·  ⌃L clear  ·  ⌃M voice mode
-                </div>
-              </div>
-            )}
-
-            {/* Messages */}
-            {chat.map((msg, idx) => (
-              <MessageBubble
-                key={msg.id}
-                msg={msg}
-                onCopy={copyMsg}
-                onRegenerate={regenerate}
-                onSpeak={msg.sender === "ai" ? () => handleBubbleSpeak(msg.text) : undefined}
-                isSpeaking={isSpeaking}
-                isLast={idx === chat.length - 1}
-              />
-            ))}
-
-            {/* Typing indicator — only while waiting for first token */}
-            {loading && !streaming && (
-              <div style={{
-                display: "flex", alignItems: "flex-start", gap: "10px",
-                animation: "fadeSlideIn 0.2s ease forwards",
-              }}>
-                <div style={{
-                  width: "28px", height: "28px", borderRadius: "50%",
-                  background: "linear-gradient(135deg, #1e40af, #3b82f6)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "11px", fontWeight: "700", color: "white",
-                  fontFamily: "'DM Mono', monospace", flexShrink: 0, marginTop: "2px",
-                }}>Æ</div>
-                <div style={{
-                  background: "#0a1628", border: "1px solid #1a2e4a",
-                  padding: "12px 15px", borderRadius: "18px 18px 18px 4px",
-                }}>
-                  <TypingDots />
-                </div>
-              </div>
-            )}
-
-            {/* Copied toast */}
-            {copied && (
-              <div style={{
-                position: "fixed", bottom: "90px", left: "50%", transform: "translateX(-50%)",
-                background: "#0a2040", border: "1px solid #1e3a5f", color: "#60a5fa",
-                padding: "8px 18px", borderRadius: "20px", fontSize: "12px",
-                fontFamily: "'DM Mono', monospace", pointerEvents: "none",
-                animation: "fadeSlideIn 0.15s ease",
-                zIndex: 50,
-              }}>✓ copied to clipboard</div>
-            )}
-
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Input & Action Bar */}
-          <div style={{ padding: "14px 24px 20px", borderTop: "1px solid #0a1e30", flexShrink: 0 }}>
-            <div style={{
-              background: "#040e1c", border: `1px solid ${voiceMode ? "#0891b2" : "#1a2e4a"}`,
-              borderRadius: "13px", display: "flex", alignItems: "flex-end",
-              gap: "8px", padding: "9px 12px",
-              boxShadow: voiceMode ? "0 0 16px rgba(6, 182, 212, 0.12)" : "none",
-              transition: "border-color 0.2s, box-shadow 0.2s",
-            }}>
-              <textarea
-                ref={inputRef}
-                value={message}
-                onChange={e => { setMessage(e.target.value); resizeTextarea(e.target); }}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  voiceMode
-                    ? "Voice Conversation Mode active · speak freely or type message…"
-                    : "Message Aegis…  (⏎ send · ⇧⏎ newline · ⎋ abort · 🎙 voice)"
-                }
-                rows={1}
-                disabled={false}
-                style={{
-                  flex: 1, background: "transparent", color: "#c7d9f0",
-                  border: "none", fontSize: "14px", lineHeight: "1.55",
-                  paddingTop: "2px", maxHeight: "160px", overflowY: "auto",
-                }}
-              />
-              {isActive || isSpeaking
-                ? <button className="abort-btn" onClick={abort} title="Abort / Stop speaking (Esc)">■</button>
-                : <>
-                  <button
-                    className={`mic-btn${voiceState === "RECORDING" ? " active-mic-btn" : ""}`}
-                    onClick={voiceMode ? toggleVoiceMode : toggleManualRecording}
-                    title={
-                      voiceMode ? "Voice Conversation Mode active (click to turn off)" :
-                      voiceState === "RECORDING" ? "Stop recording (Esc)" :
-                      "Push to talk (click to speak)"
-                    }
-                    style={{
-                      background: voiceMode ? "#0891b2" : undefined,
-                    }}
-                  >
-                    {voiceState === "RECORDING" ? "🔴" : voiceState === "TRANSCRIBING" ? "📝" : "🎤"}
-                  </button>
-                  {voiceState !== "RECORDING" && voiceState !== "TRANSCRIBING" && (
-                    <button className="send-btn" onClick={() => sendMessage()} disabled={!message.trim()} aria-label="Send">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13" />
-                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                      </svg>
-                    </button>
-                  )}
-                </>
-              }
-            </div>
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              marginTop: "8px", padding: "0 2px",
-            }}>
-              <span style={{ fontSize: "10.5px", color: "#334155", fontFamily: "'DM Mono', monospace" }}>
-                local AI assistant · offline Faster-Whisper & Ollama
-              </span>
-              {message.length > 0 && (
-                <span style={{ fontSize: "10.5px", color: "#334155", fontFamily: "'DM Mono', monospace" }}>
-                  {message.length}
-                </span>
-              )}
-            </div>
-          </div>
-
-        </div>
+        </main>
       </div>
     </>
   );
