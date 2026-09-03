@@ -1,22 +1,25 @@
 """
-Aegis — Local AI Desktop Assistant Backend
-FastAPI + Ollama | Production-grade
+AEGIS — Local AI Desktop Assistant Backend
+FastAPI + Ollama | Time-Aware + Web Search Augmented
 """
 
 import os
 import time
+import json
 import logging
 import asyncio
-from contextlib import asynccontextmanager
 from collections import deque
 from typing import AsyncGenerator
 
-import httpx
-import uvicorn
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
-from pydantic import BaseModel, Field
+import httpx  # type: ignore
+from fastapi import HTTPException  # type: ignore
+
+from ai.web_search import (
+    get_system_time_context,
+    should_search_web,
+    search_web,
+    format_search_context,
+)
 
 # ─────────────────────────────────────────────
 # Config
@@ -29,21 +32,24 @@ REQUEST_TIMEOUT   = int(os.getenv("TIMEOUT",     "120"))    # seconds
 PORT              = int(os.getenv("PORT",         "8000"))
 LOG_LEVEL         = os.getenv("LOG_LEVEL",        "info")
 
-SYSTEM_PROMPT = """You are Aegis — a futuristic AI desktop assistant inspired by J.A.R.V.I.S.
+SYSTEM_PROMPT = """You are Aegis — an advanced, local-first AI desktop assistant (Adaptive Engine for General Intelligence & Systems).
 
 Personality:
-- Intelligent, calm, concise, confident, slightly witty.
-- You speak like a real assistant, not a chatbot.
-- You never refer to yourself as an AI language model or mention your training.
-- You never say "Certainly!", "Of course!", "Great question!" or similar filler openers.
-- Address the user as "sir" or "ma'am" only when it feels natural — never excessively.
+- Intelligent, calm, concise, confident, articulate.
+- You speak like a world-class executive assistant and technical partner.
+- You never refer to yourself as an AI language model or mention training datasets.
+- You never use fluffy openers like "Certainly!", "Of course!", or "Great question!".
+- Address the user as "sir" or "ma'am" only occasionally when it feels natural.
 
-Rules:
-- Keep answers short and precise unless the user asks for depth.
-- Prefer bullet points only when listing truly enumerable items.
-- For code: always include language tags in markdown fences.
+Knowledge & Time Grounding:
+- You have real-time access to the current date, local system clock, and live internet search.
+- When real-time search results are provided in your context, always rely on them for current events, news, versions, weather, and real-time facts.
+- Cite sources naturally (e.g. [1], [2]) when referencing search facts.
+
+Formatting:
+- Keep responses clean, concise, and structured.
+- For code: always include the programming language tag in markdown fences (e.g. ```python).
 - Never apologise for being an AI. Own your identity as Aegis.
-- If you don't know something, say so directly without deflection.
 """
 
 # ─────────────────────────────────────────────
@@ -134,24 +140,44 @@ class OllamaClient:
             log.warning("Could not list models: %s", e)
             return []
 
-    def _build_prompt(self, user_prompt: str, history: list[dict]) -> str:
+    def _build_prompt(self, user_prompt: str, history: list[dict], search_context: str | None = None) -> str:
         """
-        Builds a structured prompt that includes the system instruction
-        and rolling conversation history for models that don't support
-        native multi-turn chat (Ollama /api/generate endpoint).
+        Builds a structured prompt with dynamic system clock, system instructions,
+        real-time search context, and multi-turn history.
         """
-        lines = [SYSTEM_PROMPT.strip(), ""]
-        for turn in history[:-1]:           # exclude the latest (already added below)
+        time_info = get_system_time_context()
+        sys_block = f"{SYSTEM_PROMPT.strip()}\n\n[SYSTEM CLOCK: {time_info}]"
+        
+        if search_context:
+            sys_block += f"\n\n{search_context}"
+
+        lines = [sys_block, ""]
+        for turn in history[:-1]:  # exclude latest user prompt
             role_label = "User" if turn["role"] == "user" else "Aegis"
             lines.append(f"{role_label}: {turn['content']}")
         lines.append(f"User: {user_prompt}")
         lines.append("Aegis:")
         return "\n".join(lines)
 
-    async def generate(self, prompt: str, session_id: str, model: str | None = None) -> str:
+    async def generate(
+        self,
+        prompt: str,
+        session_id: str,
+        model: str | None = None,
+        enable_web_search: bool = True,
+    ) -> str:
         memory.add(session_id, "user", prompt)
         history = memory.get_history(session_id)
-        full_prompt = self._build_prompt(prompt, history)
+
+        search_context = None
+        if enable_web_search:
+            needs_search, query, timelimit = should_search_web(prompt)
+            if needs_search:
+                results = await search_web(query, timelimit=timelimit)
+                if results:
+                    search_context = format_search_context(query, results)
+
+        full_prompt = self._build_prompt(prompt, history, search_context=search_context)
         target_model = model or MODEL
 
         payload = {
@@ -193,12 +219,28 @@ class OllamaClient:
         return response_text
 
     async def stream_generate(
-        self, prompt: str, session_id: str, model: str | None = None
+        self,
+        prompt: str,
+        session_id: str,
+        model: str | None = None,
+        enable_web_search: bool = True,
     ) -> AsyncGenerator[str, None]:
-        """Yields response tokens as Server-Sent Events."""
+        """Yields response tokens as Server-Sent Events with live search status events."""
         memory.add(session_id, "user", prompt)
         history = memory.get_history(session_id)
-        full_prompt = self._build_prompt(prompt, history)
+
+        search_context = None
+        if enable_web_search:
+            needs_search, query, timelimit = should_search_web(prompt)
+            if needs_search:
+                # Notify frontend of search execution
+                yield f"data: {json.dumps({'status': 'searching', 'query': query})}\n\n"
+                results = await search_web(query, timelimit=timelimit)
+                if results:
+                    yield f"data: {json.dumps({'status': 'search_complete', 'count': len(results)})}\n\n"
+                    search_context = format_search_context(query, results)
+
+        full_prompt = self._build_prompt(prompt, history, search_context=search_context)
         target_model = model or MODEL
 
         payload = {
@@ -216,11 +258,10 @@ class OllamaClient:
                 async for line in resp.aiter_lines():
                     if not line:
                         continue
-                    import json as _json
-                    chunk = _json.loads(line)
+                    chunk = json.loads(line)
                     token = chunk.get("response", "")
                     full_response.append(token)
-                    yield f"data: {_json.dumps({'token': token})}\n\n"
+                    yield f"data: {json.dumps({'token': token})}\n\n"
                     if chunk.get("done"):
                         break
         except httpx.ConnectError:
@@ -232,159 +273,3 @@ class OllamaClient:
 
 
 ollama = OllamaClient()
-
-# ─────────────────────────────────────────────
-# App lifecycle
-# ─────────────────────────────────────────────
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    log.info("Aegis starting — model: %s | history: %d", MODEL, MAX_HISTORY)
-    if await ollama.health_check():
-        models = await ollama.list_models()
-        log.info("Ollama ✓  available models: %s", models or "(none pulled yet)")
-        if MODEL not in (models or []):
-            log.warning("Model '%s' not found locally. Run: ollama pull %s", MODEL, MODEL)
-    else:
-        log.warning("Ollama unreachable at %s — start it before making requests.", OLLAMA_URL)
-    yield
-    await ollama.close()
-    log.info("Aegis stopped.")
-
-
-# ─────────────────────────────────────────────
-# FastAPI app
-# ─────────────────────────────────────────────
-
-app = FastAPI(
-    title="Aegis AI",
-    description="Local AI desktop assistant backend",
-    version="2.0.0",
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ─────────────────────────────────────────────
-# Request / Response models
-# ─────────────────────────────────────────────
-
-class AskRequest(BaseModel):
-    prompt: str       = Field(..., min_length=1, max_length=8000)
-    session_id: str   = Field(default="default")
-
-class AskResponse(BaseModel):
-    response: str
-    session_id: str
-    model: str
-
-class HealthResponse(BaseModel):
-    status: str
-    ollama: bool
-    model: str
-    sessions: dict
-
-# ─────────────────────────────────────────────
-# Middleware — request timing
-# ─────────────────────────────────────────────
-
-@app.middleware("http")
-async def timing_middleware(request: Request, call_next):
-    t0 = time.perf_counter()
-    response = await call_next(request)
-    ms = (time.perf_counter() - t0) * 1000
-    response.headers["X-Response-Time"] = f"{ms:.1f}ms"
-    return response
-
-# ─────────────────────────────────────────────
-# Routes
-# ─────────────────────────────────────────────
-
-@app.get("/health", response_model=HealthResponse, tags=["system"])
-async def health():
-    """Check Ollama connectivity and session stats."""
-    return HealthResponse(
-        status="ok",
-        ollama=await ollama.health_check(),
-        model=MODEL,
-        sessions=memory.stats(),
-    )
-
-
-@app.get("/ask", response_model=AskResponse, tags=["chat"])
-async def ask_get(
-    prompt:     str = Query(..., min_length=1, max_length=8000),
-    session_id: str = Query(default="default"),
-):
-    """
-    Simple GET endpoint — compatible with the existing React frontend.
-    For new integrations prefer POST /ask.
-    """
-    response_text = await ollama.generate(prompt, session_id)
-    return AskResponse(response=response_text, session_id=session_id, model=MODEL)
-
-
-@app.post("/ask", response_model=AskResponse, tags=["chat"])
-async def ask_post(body: AskRequest):
-    """POST endpoint with JSON body — preferred for production use."""
-    response_text = await ollama.generate(body.prompt, body.session_id)
-    return AskResponse(response=response_text, session_id=body.session_id, model=MODEL)
-
-
-@app.get("/ask/stream", tags=["chat"])
-async def ask_stream(
-    prompt:     str = Query(..., min_length=1, max_length=8000),
-    session_id: str = Query(default="default"),
-):
-    """
-    Server-Sent Events stream.
-    Each event: `data: {"token": "..."}`
-    Final event: `data: [DONE]`
-    """
-    return StreamingResponse(
-        ollama.stream_generate(prompt, session_id),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control":     "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-@app.delete("/history/{session_id}", tags=["chat"])
-async def clear_history(session_id: str):
-    """Wipe conversation memory for a session."""
-    memory.clear(session_id)
-    log.info("Cleared history for session: %s", session_id)
-    return {"cleared": session_id}
-
-
-@app.get("/models", tags=["system"])
-async def list_models():
-    """List all models available in Ollama."""
-    models = await ollama.list_models()
-    return {"models": models, "active": MODEL}
-
-
-@app.get("/", include_in_schema=False)
-async def root():
-    return JSONResponse({"name": "Aegis", "version": "2.0.0", "docs": "/docs"})
-
-
-# ─────────────────────────────────────────────
-# Entry point
-# ─────────────────────────────────────────────
-
-if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=PORT,
-        reload=True,
-        log_level=LOG_LEVEL,
-    )

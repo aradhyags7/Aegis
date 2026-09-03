@@ -1,9 +1,9 @@
 import React from "react";
-import { JarvisCore } from "./JarvisCore";
+import { AegisCore } from "./AegisCore";
 import { HudTelemetry } from "./HudTelemetry";
 import { VoiceState } from "../voiceController";
 
-interface JarvisHudViewProps {
+interface AegisHudViewProps {
   voiceState: VoiceState;
   audioEnergy: number;
   isVoiceMode: boolean;
@@ -12,26 +12,19 @@ interface JarvisHudViewProps {
   messageCount: number;
   audioCuesEnabled: boolean;
   theme: "dark" | "light";
+  liveTranscript?: string;
+  searchStatus?: string | null;
   lastUserMessage?: string;
   lastAiMessage?: string;
   isStreaming: boolean;
   isLoading: boolean;
   onToggleVoiceMode: () => void;
   onToggleAudioCues: () => void;
-  onSendPrompt: (text: string) => void;
   onAbort: () => void;
   onSwitchToTerminal: () => void;
 }
 
-const QUICK_PROMPTS = [
-  "Run system diagnostics",
-  "Explain quantum computing",
-  "Write an async Python web scraper",
-  "What is the Fermi paradox?",
-  "Summarize active local capabilities",
-];
-
-export const JarvisHudView: React.FC<JarvisHudViewProps> = ({
+export const AegisHudView: React.FC<AegisHudViewProps> = ({
   voiceState,
   audioEnergy,
   isVoiceMode,
@@ -40,16 +33,22 @@ export const JarvisHudView: React.FC<JarvisHudViewProps> = ({
   messageCount,
   audioCuesEnabled,
   theme,
+  liveTranscript,
+  searchStatus,
   lastUserMessage,
   lastAiMessage,
   isStreaming,
   isLoading,
   onToggleVoiceMode,
   onToggleAudioCues,
-  onSendPrompt,
   onAbort,
   onSwitchToTerminal,
 }) => {
+  const isRecording = voiceState === "RECORDING";
+  const displayedUserText = isRecording
+    ? (liveTranscript || "Listening to speech…")
+    : (lastUserMessage || liveTranscript);
+
   return (
     <div
       style={{
@@ -63,8 +62,9 @@ export const JarvisHudView: React.FC<JarvisHudViewProps> = ({
         overflow: "hidden",
       }}
     >
-      {/* Background Holographic Grid & Scanlines */}
+      {/* Background Holographic Grid, Radar Sweep & Scanlines */}
       <div className="hud-grid-background" />
+      <div className="hud-radar-sweep" />
       <div className="hud-scanlines" />
       <div className="hud-vignette" />
 
@@ -90,10 +90,10 @@ export const JarvisHudView: React.FC<JarvisHudViewProps> = ({
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          marginTop: "-30px",
+          marginTop: "-20px",
         }}
       >
-        <JarvisCore
+        <AegisCore
           voiceState={voiceState}
           audioEnergy={audioEnergy}
           isVoiceMode={isVoiceMode}
@@ -102,7 +102,7 @@ export const JarvisHudView: React.FC<JarvisHudViewProps> = ({
           size={360}
         />
 
-        {/* Live Mini Spectrum Audio Waveform Bar (Super Animation) */}
+        {/* Live Mini Spectrum Audio Waveform Bar */}
         {(voiceState === "RECORDING" || voiceState === "SPEAKING" || audioEnergy > 0) && (
           <div
             style={{
@@ -135,63 +135,113 @@ export const JarvisHudView: React.FC<JarvisHudViewProps> = ({
         )}
       </div>
 
-      {/* ── Bottom Floating Holographic Subtitles & Transcript ── */}
+      {/* ── Bottom Floating Real-Time Subtitles & Transcript ── */}
       <div
         style={{
           position: "absolute",
-          bottom: "28px",
+          bottom: "32px",
           width: "calc(100% - 580px)",
           maxWidth: "760px",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "12px",
+          gap: "14px",
           zIndex: 4,
         }}
       >
         {/* Live Subtitle Transcript Ribbon */}
-        {(lastUserMessage || lastAiMessage || isLoading || isStreaming) && (
+        {(displayedUserText || lastAiMessage || isLoading || isStreaming || isRecording || searchStatus) && (
           <div
             className="hud-corner-box"
             style={{
               width: "100%",
-              padding: "12px 18px",
+              padding: "14px 20px",
               display: "flex",
               flexDirection: "column",
-              gap: "6px",
-              maxHeight: "130px",
+              gap: "8px",
+              maxHeight: "150px",
               overflowY: "auto",
-              boxShadow: "0 0 20px var(--shadow-glow)",
+              boxShadow: "0 0 24px var(--shadow-glow)",
+              border: isRecording ? "1px solid var(--red-hazard)" : "1px solid var(--cyan-border)",
             }}
           >
-            {lastUserMessage && (
-              <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+            {/* Live Search Status Alert */}
+            {searchStatus && (
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                 <span
                   style={{
                     fontFamily: "'Orbitron', monospace",
                     fontSize: "10px",
-                    color: "var(--text-cyan)",
+                    color: "var(--cyan-glow)",
                     fontWeight: 700,
                     letterSpacing: "1px",
                     flexShrink: 0,
                   }}
                 >
-                  USER //
+                  LIVE WEB //
                 </span>
-                <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontFamily: "'Outfit', sans-serif" }}>
-                  {lastUserMessage}
+                <span
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--text-cyan)",
+                    fontFamily: "'DM Mono', monospace",
+                    animation: "textShimmer 1.6s infinite",
+                  }}
+                >
+                  🌐 {searchStatus}
                 </span>
               </div>
             )}
 
-            {(lastAiMessage || isLoading || isStreaming) && (
+            {/* Real-time live transcribing speech ribbon */}
+            {(isRecording || displayedUserText) && (
+              <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                <span
+                  style={{
+                    fontFamily: "'Orbitron', monospace",
+                    fontSize: "10px",
+                    color: isRecording ? "var(--red-hazard)" : "var(--text-cyan)",
+                    fontWeight: 700,
+                    letterSpacing: "1px",
+                    flexShrink: 0,
+                  }}
+                >
+                  {isRecording ? "LIVE SPEECH //" : "USER //"}
+                </span>
+                <span
+                  style={{
+                    fontSize: "13.5px",
+                    color: isRecording ? "var(--text-main)" : "var(--text-secondary)",
+                    fontFamily: "'Outfit', sans-serif",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {displayedUserText}
+                  {isRecording && (
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "6px",
+                        height: "12px",
+                        background: "var(--red-hazard)",
+                        marginLeft: "4px",
+                        animation: "blink 0.6s infinite",
+                      }}
+                    />
+                  )}
+                </span>
+              </div>
+            )}
+
+            {/* AI Real-time streaming response */}
+            {(lastAiMessage || isLoading || isStreaming || voiceState === "TRANSCRIBING" || voiceState === "THINKING") && !isRecording && (
               <div
                 style={{
                   display: "flex",
                   gap: "10px",
                   alignItems: "flex-start",
-                  borderTop: lastUserMessage ? "1px solid var(--cyan-border)" : "none",
-                  paddingTop: lastUserMessage ? "6px" : "0",
+                  borderTop: (displayedUserText || searchStatus) ? "1px solid var(--cyan-border)" : "none",
+                  paddingTop: (displayedUserText || searchStatus) ? "6px" : "0",
                 }}
               >
                 <span
@@ -206,8 +256,12 @@ export const JarvisHudView: React.FC<JarvisHudViewProps> = ({
                 >
                   AEGIS //
                 </span>
-                <span style={{ fontSize: "13px", color: "var(--text-main)", fontFamily: "'Outfit', sans-serif", lineHeight: "1.4" }}>
-                  {isLoading && !isStreaming ? (
+                <span style={{ fontSize: "13.5px", color: "var(--text-main)", fontFamily: "'Outfit', sans-serif", lineHeight: "1.4" }}>
+                  {voiceState === "TRANSCRIBING" ? (
+                    <span style={{ color: "var(--amber-warn)", animation: "textShimmer 1.5s infinite" }}>
+                      📝 Transcribing with Faster-Whisper…
+                    </span>
+                  ) : isLoading && !isStreaming ? (
                     <span style={{ color: "var(--text-cyan)", animation: "textShimmer 1.8s infinite" }}>
                       ◈ Synthesizing neural response…
                     </span>
@@ -232,22 +286,8 @@ export const JarvisHudView: React.FC<JarvisHudViewProps> = ({
           </div>
         )}
 
-        {/* Quick Voice Command Chips */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
-          {QUICK_PROMPTS.map((prompt) => (
-            <button
-              key={prompt}
-              onClick={() => onSendPrompt(prompt)}
-              className="hud-btn"
-              style={{ fontSize: "11px", padding: "5px 12px", borderRadius: "18px" }}
-            >
-              <span>{prompt}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Bottom HUD Controls */}
-        <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: "2px" }}>
+        {/* Bottom HUD Controls (Clean & Minimalist) */}
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           {voiceState === "SPEAKING" || isLoading || isStreaming ? (
             <button onClick={onAbort} className="hud-btn hud-btn-danger">
               <span>■ INTERRUPT / STOP (ESC)</span>
@@ -257,7 +297,7 @@ export const JarvisHudView: React.FC<JarvisHudViewProps> = ({
               onClick={onToggleVoiceMode}
               className={`hud-btn ${isVoiceMode ? "active" : ""}`}
             >
-              <span>{isVoiceMode ? "● VOICE ACTIVE" : "🎙 START VOICE MODE"}</span>
+              <span>{isVoiceMode ? "● VOICE MODE ACTIVE" : "🎙 START VOICE MODE"}</span>
             </button>
           )}
 

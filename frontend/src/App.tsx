@@ -1,10 +1,12 @@
 /**
- * AEGIS // J.A.R.V.I.S. Tactical AI Desktop Interface
+ * AEGIS — Adaptive Engine for General Intelligence & Systems
  *
  * Capabilities:
  *  ✦ Dual View Architecture:
- *      1. Holographic HUD Mode (Iron Man / Arc Reactor Core, live subtitles, audio telemetry)
+ *      1. Holographic HUD Mode (Arc Reactor Core, live real-time speech subtitles, audio telemetry)
  *      2. Tactical Command Terminal (Glassmorphic chat, syntax-highlighted code, markdown)
+ *  ✦ Real-time Live Speech-to-Text Transcription displayed while speaking
+ *  ✦ Real-time Time-Aware Internet Web Search & Source Citations
  *  ✦ Dynamic Dark / Light Themes (Cosmic Obsidian & Titanium Stark White)
  *  ✦ Interactive Sound-Reactive Arc Reactor with Click Shockwaves & Orbiting Nodes
  *  ✦ Real-time Voice Activity Detection (VAD) & Silence Auto-Stop (~1.3s)
@@ -29,7 +31,7 @@ import {
   playAudioCue,
 } from "./voiceController";
 
-import { JarvisHudView } from "./components/JarvisHudView";
+import { AegisHudView } from "./components/AegisHudView";
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -472,14 +474,6 @@ function TypingDots() {
   );
 }
 
-const TERMINAL_SUGGESTIONS = [
-  "Run local diagnostic sweep",
-  "Write an async Python web scraper",
-  "Explain quantum entanglement",
-  "Debug this React memory leak",
-  "Summarize the French Revolution",
-];
-
 // ─────────────────────────────────────────────────────────
 // Main App Component
 // ─────────────────────────────────────────────────────────
@@ -510,6 +504,7 @@ export default function App() {
   const [chat, setChat]                         = useState<Message[]>(loadHistory);
   const [loading, setLoading]                   = useState(false);
   const [streaming, setStreaming]               = useState(false);
+  const [searchStatus, setSearchStatus]         = useState<string | null>(null);
   const [status, setStatus]                     = useState<BackendStatus>("checking");
   const [models, setModels]                     = useState<string[]>([]);
   const [activeModel, setActiveModel]           = useState("llama3");
@@ -520,6 +515,7 @@ export default function App() {
   const [voiceMode, setVoiceMode]               = useState(false);
   const [voiceState, setVoiceState]             = useState<VoiceState>("IDLE");
   const [audioEnergy, setAudioEnergy]           = useState(0);
+  const [liveTranscript, setLiveTranscript]     = useState("");
   const [audioCuesEnabled, setAudioCuesEnabled] = useState(() => {
     return localStorage.getItem("aegis_audio_cues") !== "false";
   });
@@ -531,6 +527,7 @@ export default function App() {
   const audioCuesEnabledRef = useRef(audioCuesEnabled);
   const ttsRef              = useRef<TTSController>(new TTSController());
   const vadRef              = useRef<VADEngine>(new VADEngine());
+  const recognitionRef      = useRef<any>(null);
 
   const chatEndRef        = useRef<HTMLDivElement>(null);
   const inputRef          = useRef<HTMLTextAreaElement>(null);
@@ -609,13 +606,54 @@ export default function App() {
     }
   }, []);
 
+  // Live Speech Recognition Helper (for real-time typing display while speaking)
+  const startLiveSpeechRecognition = useCallback(() => {
+    try {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) return;
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-US";
+
+      rec.onresult = (event: any) => {
+        let interimStr = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          interimStr += event.results[i][0].transcript;
+        }
+        if (interimStr.trim()) {
+          setLiveTranscript(interimStr.trim());
+        }
+      };
+
+      rec.onerror = () => { /* fallback to Faster-Whisper audio blob */ };
+      rec.onend = () => { /* end of interim session */ };
+
+      recognitionRef.current = rec;
+      rec.start();
+    } catch {
+      /* ignore if unavailable in environment */
+    }
+  }, []);
+
+  const stopLiveSpeechRecognition = useCallback(() => {
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   // Abort Stream & TTS
   const abort = useCallback(() => {
     if (esRef.current) {
       esRef.current.close();
       esRef.current = null;
     }
+    stopLiveSpeechRecognition();
     ttsRef.current.cancel();
+    setSearchStatus(null);
     setLoading(false);
     setStreaming(false);
     setChat(prev => prev.map(m => m.streaming ? { ...m, streaming: false } : m));
@@ -624,13 +662,14 @@ export default function App() {
     } else {
       updateVoiceState("IDLE");
     }
-  }, [updateVoiceState]);
+  }, [updateVoiceState, stopLiveSpeechRecognition]);
 
   // Clean stream
   const cleanupStream = useCallback(() => {
+    stopLiveSpeechRecognition();
     mediaStreamRef.current?.getTracks().forEach(track => track.stop());
     mediaStreamRef.current = null;
-  }, []);
+  }, [stopLiveSpeechRecognition]);
 
   const pickMimeType = (): string => {
     const candidates = [
@@ -663,6 +702,7 @@ export default function App() {
     setChat(prev => [...prev, userMsg]);
     setMessage("");
     setLoading(true);
+    setSearchStatus(null);
     atBottomRef.current = true;
     updateVoiceState("THINKING");
 
@@ -681,6 +721,7 @@ export default function App() {
         esRef.current = null;
         setStreaming(false);
         setLoading(false);
+        setSearchStatus(null);
         setChat(prev => prev.map(m => m.id === aiId ? { ...m, streaming: false } : m));
 
         const shouldSpeak = fromVoice || voiceModeRef.current;
@@ -705,6 +746,7 @@ export default function App() {
           es.close();
           setStreaming(false);
           setLoading(false);
+          setSearchStatus(null);
           setChat(prev => prev.map(m => m.id === aiId ? {
             ...m, text: `⚠ ${parsed.error}`, streaming: false
           } : m));
@@ -712,16 +754,30 @@ export default function App() {
           else updateVoiceState("IDLE");
           return;
         }
-        buffer += parsed.token ?? "";
 
-        if (!gotFirstToken) {
-          gotFirstToken = true;
-          setLoading(false);
-          setStreaming(true);
-          updateVoiceState("SPEAKING");
-          setChat(prev => [...prev, { id: aiId, sender: "ai", text: buffer, timestamp: Date.now(), streaming: true }]);
-        } else {
-          setChat(prev => prev.map(m => m.id === aiId ? { ...m, text: buffer } : m));
+        // Live Web Search Events
+        if (parsed.status === "searching") {
+          setSearchStatus(`Searching web for: "${parsed.query}"…`);
+          return;
+        }
+        if (parsed.status === "search_complete") {
+          setSearchStatus(null);
+          return;
+        }
+
+        if (parsed.token !== undefined) {
+          buffer += parsed.token;
+          setSearchStatus(null);
+
+          if (!gotFirstToken) {
+            gotFirstToken = true;
+            setLoading(false);
+            setStreaming(true);
+            updateVoiceState("SPEAKING");
+            setChat(prev => [...prev, { id: aiId, sender: "ai", text: buffer, timestamp: Date.now(), streaming: true }]);
+          } else {
+            setChat(prev => prev.map(m => m.id === aiId ? { ...m, text: buffer } : m));
+          }
         }
       } catch { /* ignore */ }
     };
@@ -731,6 +787,7 @@ export default function App() {
       esRef.current = null;
       setLoading(false);
       setStreaming(false);
+      setSearchStatus(null);
       if (!gotFirstToken) {
         setChat(prev => [...prev, {
           id: aiId,
@@ -748,6 +805,8 @@ export default function App() {
 
   // Faster-Whisper Transcribe
   const transcribeAndSend = useCallback(async (blob: Blob, mimeType: string) => {
+    stopLiveSpeechRecognition();
+
     if (blob.size === 0) {
       if (voiceModeRef.current) updateVoiceState("LISTENING");
       else updateVoiceState("IDLE");
@@ -778,9 +837,10 @@ export default function App() {
       }
 
       const data: { text?: string } = await res.json();
-      const transcript = data.text?.trim();
+      const transcript = data.text?.trim() || liveTranscript.trim();
 
       if (transcript) {
+        setLiveTranscript(transcript);
         sendMessage(transcript, true);
       } else {
         if (voiceModeRef.current) updateVoiceState("LISTENING");
@@ -788,18 +848,26 @@ export default function App() {
       }
     } catch (err) {
       console.error("Transcription network error:", err);
-      playAudioCue("error", audioCuesEnabledRef.current);
-      updateVoiceState("ERROR", "Network error during transcription.");
-      setTimeout(() => {
-        if (voiceModeRef.current) updateVoiceState("LISTENING");
-        else updateVoiceState("IDLE");
-      }, 2200);
+      // Fallback to interim transcript if available
+      if (liveTranscript.trim()) {
+        sendMessage(liveTranscript.trim(), true);
+      } else {
+        playAudioCue("error", audioCuesEnabledRef.current);
+        updateVoiceState("ERROR", "Network error during transcription.");
+        setTimeout(() => {
+          if (voiceModeRef.current) updateVoiceState("LISTENING");
+          else updateVoiceState("IDLE");
+        }, 2200);
+      }
     }
-  }, [sendMessage, updateVoiceState]);
+  }, [sendMessage, updateVoiceState, liveTranscript, stopLiveSpeechRecognition]);
 
   // MediaRecorder handlers
   const startMediaRecorder = useCallback((stream: MediaStream) => {
     try {
+      setLiveTranscript("");
+      startLiveSpeechRecognition();
+
       const mimeType = pickMimeType();
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
@@ -837,7 +905,7 @@ export default function App() {
       console.error("Failed to start MediaRecorder:", err);
       updateVoiceState("ERROR", "Failed to start recorder.");
     }
-  }, [transcribeAndSend, updateVoiceState]);
+  }, [transcribeAndSend, updateVoiceState, startLiveSpeechRecognition]);
 
   const stopMediaRecorder = useCallback(() => {
     const recorder = mediaRecorderRef.current;
@@ -845,7 +913,8 @@ export default function App() {
       recorder.stop();
     }
     mediaRecorderRef.current = null;
-  }, []);
+    stopLiveSpeechRecognition();
+  }, [stopLiveSpeechRecognition]);
 
   // VAD Listeners
   useEffect(() => {
@@ -879,6 +948,7 @@ export default function App() {
           esRef.current.close();
           esRef.current = null;
         }
+        setSearchStatus(null);
         setLoading(false);
         setStreaming(false);
         playAudioCue("interrupted", audioCuesEnabledRef.current);
@@ -923,6 +993,8 @@ export default function App() {
     ttsRef.current.cancel();
     cleanupStream();
     setAudioEnergy(0);
+    setLiveTranscript("");
+    setSearchStatus(null);
     updateVoiceState("IDLE");
     playAudioCue("deactivated", audioCuesEnabledRef.current);
   }, [cleanupStream, stopMediaRecorder, updateVoiceState]);
@@ -1069,9 +1141,6 @@ export default function App() {
   const lastUserMsg = [...chat].reverse().find(m => m.sender === "user")?.text;
   const lastAiMsg = [...chat].reverse().find(m => m.sender === "ai")?.text;
 
-  const statusColor = status === "online" ? "var(--green-online)" : status === "offline" ? "var(--red-hazard)" : "var(--amber-warn)";
-  const statusLabel = status === "online" ? "ONLINE" : status === "offline" ? "OFFLINE" : "CHECKING";
-
   return (
     <>
       {/* ── Clear Confirm Dialog ─────────────────────── */}
@@ -1142,10 +1211,10 @@ export default function App() {
             </div>
             <div>
               <div style={{ fontFamily: "'Orbitron', monospace", fontSize: "14px", fontWeight: 700, letterSpacing: "1.5px", color: "var(--text-main)" }}>
-                AEGIS <span style={{ color: "var(--cyan-glow)", fontSize: "10px", letterSpacing: "1px" }}>// J.A.R.V.I.S.</span>
+                AEGIS <span style={{ color: "var(--cyan-glow)", fontSize: "10px", letterSpacing: "1px" }}>// AI</span>
               </div>
               <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: "10px", color: "var(--text-muted)", letterSpacing: "1px", textTransform: "uppercase" }}>
-                LOCAL SECURE DESKTOP ASSISTANT
+                ADAPTIVE ENGINE FOR GENERAL INTELLIGENCE & SYSTEMS
               </div>
             </div>
           </div>
@@ -1248,7 +1317,7 @@ export default function App() {
         {/* ── Main View Switcher ──────────────────────────── */}
         <main style={{ flex: 1, position: "relative", overflow: "hidden" }}>
           {viewMode === "HUD" ? (
-            <JarvisHudView
+            <AegisHudView
               voiceState={voiceState}
               audioEnergy={audioEnergy}
               isVoiceMode={voiceMode}
@@ -1257,13 +1326,14 @@ export default function App() {
               messageCount={chat.length}
               audioCuesEnabled={audioCuesEnabled}
               theme={theme}
+              liveTranscript={liveTranscript}
+              searchStatus={searchStatus}
               lastUserMessage={lastUserMsg}
               lastAiMessage={lastAiMsg}
               isStreaming={streaming}
               isLoading={loading}
               onToggleVoiceMode={toggleVoiceMode}
               onToggleAudioCues={() => setAudioCuesEnabled(prev => !prev)}
-              onSendPrompt={sendMessage}
               onAbort={abort}
               onSwitchToTerminal={() => setViewMode("TERMINAL")}
             />
@@ -1303,7 +1373,7 @@ export default function App() {
                       alignItems: "center",
                       justifyContent: "center",
                       gap: "16px",
-                      marginTop: "60px",
+                      marginTop: "80px",
                     }}
                   >
                     <div
@@ -1326,23 +1396,11 @@ export default function App() {
                     </div>
                     <div style={{ textAlign: "center" }}>
                       <div style={{ fontFamily: "'Orbitron', monospace", fontSize: "18px", fontWeight: 700, color: "var(--text-main)", letterSpacing: "1px" }}>
-                        TACTICAL COMMAND INTERFACE
+                        AEGIS COMMAND TERMINAL
                       </div>
                       <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
-                        Neural engine {activeModel} ready · Fully local & airgapped
+                        Adaptive Engine for General Intelligence & Systems · {activeModel}
                       </div>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", maxWidth: "560px" }}>
-                      {TERMINAL_SUGGESTIONS.map(s => (
-                        <button
-                          key={s}
-                          onClick={() => sendMessage(s)}
-                          className="hud-btn"
-                          style={{ fontSize: "11px", padding: "6px 14px", borderRadius: "18px" }}
-                        >
-                          {s}
-                        </button>
-                      ))}
                     </div>
                   </div>
                 )}
@@ -1378,8 +1436,13 @@ export default function App() {
                     >
                       Æ
                     </div>
-                    <div className="hud-corner-box" style={{ padding: "10px 16px", borderRadius: "4px" }}>
+                    <div className="hud-corner-box" style={{ padding: "10px 16px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "10px" }}>
                       <TypingDots />
+                      {searchStatus && (
+                        <span style={{ fontSize: "12.5px", color: "var(--text-cyan)", fontFamily: "'DM Mono', monospace" }}>
+                          🌐 {searchStatus}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1405,7 +1468,7 @@ export default function App() {
                     alignItems: "flex-end",
                     gap: "10px",
                     padding: "10px 14px",
-                    border: `1px solid ${voiceMode ? "var(--cyan-glow)" : "var(--cyan-border)"}`,
+                    border: `1px solid ${voiceState === "RECORDING" ? "var(--red-hazard)" : voiceMode ? "var(--cyan-glow)" : "var(--cyan-border)"}`,
                     boxShadow: voiceMode ? "0 0 16px var(--shadow-glow)" : "none",
                   }}
                 >
@@ -1415,9 +1478,11 @@ export default function App() {
                     onChange={e => { setMessage(e.target.value); resizeTextarea(e.target); }}
                     onKeyDown={handleKeyDown}
                     placeholder={
-                      voiceMode
-                        ? "Voice Conversation Mode active · speak freely or enter command…"
-                        : "Enter command or message…  (⏎ send · ⇧⏎ newline · ⎋ abort · Tab HUD)"
+                      voiceState === "RECORDING"
+                        ? `Live Speech: ${liveTranscript || "Listening…"}`
+                        : voiceMode
+                        ? "Voice Mode active · speak freely or enter message…"
+                        : "Enter message…  (⏎ send · ⇧⏎ newline · ⎋ abort · Tab HUD)"
                     }
                     rows={1}
                     style={{
@@ -1460,7 +1525,7 @@ export default function App() {
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px", fontSize: "10px", color: "var(--text-muted)", fontFamily: "'DM Mono', monospace" }}>
-                  <span>AEGIS PROTOCOL 01 // PRESS TAB TO TOGGLE HOLOGRAPHIC HUD</span>
+                  <span>AEGIS PROTOCOL // REAL-TIME TIME-AWARE SEARCH ARMED</span>
                   <span>{message.length > 0 ? `${message.length} CHARS` : "READY"}</span>
                 </div>
               </div>

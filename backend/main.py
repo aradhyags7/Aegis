@@ -6,12 +6,12 @@ import time
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException, Query, Depends, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import FastAPI, Request, HTTPException, Query, Depends, UploadFile, File  # type: ignore
+from fastapi.middleware.cors import CORSMiddleware  # type: ignore
+from fastapi.middleware.gzip import GZipMiddleware  # type: ignore
+from fastapi.responses import StreamingResponse, JSONResponse  # type: ignore
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field  # type: ignore
 
 from ai.ollama_client import ollama, memory, MODEL
 from ai.whisper_client import transcribe
@@ -29,6 +29,7 @@ class AskRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=8000, description="User message")
     session_id: str = Field(default="default", min_length=1, max_length=64)
     model: str | None = Field(default=None, description="Optional model override")
+    web_search: bool = Field(default=True, description="Enable real-time internet search augmentation")
 
 class AskResponse(BaseModel):
     response: str
@@ -169,13 +170,19 @@ async def ask_get(
     prompt: str = Depends(validate_prompt),
     session_id: str = Depends(validate_session),
     model: str | None = Query(default=None, description="Optional model override"),
+    web_search: bool = Query(default=True, description="Enable web search"),
 ):
     """
     Kept for backward compatibility with the original frontend.
     For new integrations prefer POST /ask or GET /ask/stream.
     """
     active_model = model or MODEL
-    response_text = await ollama.generate(prompt, session_id, model=active_model)
+    response_text = await ollama.generate(
+        prompt,
+        session_id,
+        model=active_model,
+        enable_web_search=web_search,
+    )
     return AskResponse(
         response=response_text,
         session_id=session_id,
@@ -187,7 +194,12 @@ async def ask_get(
 async def ask_post(body: AskRequest):
     """POST endpoint with JSON body."""
     active_model = body.model or MODEL
-    response_text = await ollama.generate(body.prompt, body.session_id, model=active_model)
+    response_text = await ollama.generate(
+        body.prompt,
+        body.session_id,
+        model=active_model,
+        enable_web_search=body.web_search,
+    )
     return AskResponse(
         response=response_text,
         session_id=body.session_id,
@@ -205,11 +217,13 @@ async def ask_stream(
     prompt: str = Depends(validate_prompt),
     session_id: str = Depends(validate_session),
     model: str | None = Query(default=None, description="Optional model override"),
+    web_search: bool = Query(default=True, description="Enable web search"),
 ):
     """
     Streams response tokens as Server-Sent Events.
 
     Event format:
+      `data: {"status": "searching", "query": "..."}`
       `data: {"token": "..."}`
     Final event:
       `data: [DONE]`
@@ -217,7 +231,7 @@ async def ask_stream(
       `data: {"error": "..."}`
     """
     return StreamingResponse(
-        ollama.stream_generate(prompt, session_id, model=model),
+        ollama.stream_generate(prompt, session_id, model=model, enable_web_search=web_search),
         media_type="text/event-stream",
         headers={
             "Cache-Control":     "no-cache",

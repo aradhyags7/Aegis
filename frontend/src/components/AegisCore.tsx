@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { VoiceState } from "../voiceController";
 
-interface JarvisCoreProps {
+interface AegisCoreProps {
   voiceState: VoiceState;
   audioEnergy: number;
   isVoiceMode: boolean;
@@ -15,7 +15,7 @@ interface ClickRipple {
   timestamp: number;
 }
 
-export const JarvisCore: React.FC<JarvisCoreProps> = ({
+export const AegisCore: React.FC<AegisCoreProps> = ({
   voiceState,
   audioEnergy,
   isVoiceMode,
@@ -60,7 +60,7 @@ export const JarvisCore: React.FC<JarvisCoreProps> = ({
           primaryColor: isLight ? "#d97706" : "#f59e0b",
           secondaryColor: "#b45309",
           glowColor: "rgba(245, 158, 11, 0.75)",
-          label: "TRANSCRIBING // WHISPER_INT8",
+          label: "TRANSCRIBING // FASTER_WHISPER",
           spinSpeedOuter: `${1.4 * hoverMultiplier}s`,
           spinSpeedInner: `${0.9 * hoverMultiplier}s`,
           pulseScale: 1.1,
@@ -260,13 +260,13 @@ export const JarvisCore: React.FC<JarvisCoreProps> = ({
         }}
       >
         <defs>
-          <linearGradient id="jarvisPlasmaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id="aegisPlasmaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor={stateConfig.primaryColor} stopOpacity="0.95" />
             <stop offset="60%" stopColor={stateConfig.secondaryColor} stopOpacity="0.8" />
             <stop offset="100%" stopColor={isLight ? "#f0f4f9" : "#020813"} stopOpacity="0.95" />
           </linearGradient>
 
-          <filter id="jarvisGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <filter id="aegisGlow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
@@ -283,7 +283,7 @@ export const JarvisCore: React.FC<JarvisCoreProps> = ({
             cy={size / 2}
             fill="none"
             stroke={stateConfig.primaryColor}
-            filter="url(#jarvisGlow)"
+            filter="url(#aegisGlow)"
             style={{
               animation: "coreShockwave 0.75s ease-out forwards",
             }}
@@ -318,7 +318,7 @@ export const JarvisCore: React.FC<JarvisCoreProps> = ({
             strokeWidth="1.8"
             strokeDasharray={`${size * 0.28} ${size * 0.08} ${size * 0.04} ${size * 0.08}`}
             strokeOpacity={isLight ? 0.85 : 0.75}
-            filter="url(#jarvisGlow)"
+            filter="url(#aegisGlow)"
           />
 
           {/* 4 Compass Telemetry Nodes */}
@@ -333,7 +333,7 @@ export const JarvisCore: React.FC<JarvisCoreProps> = ({
                 cy={y}
                 r="3"
                 fill={stateConfig.primaryColor}
-                filter="url(#jarvisGlow)"
+                filter="url(#aegisGlow)"
               />
             );
           })}
@@ -391,7 +391,7 @@ export const JarvisCore: React.FC<JarvisCoreProps> = ({
               strokeWidth="1.6"
               strokeOpacity="0.9"
               strokeLinecap="round"
-              filter="url(#jarvisGlow)"
+              filter="url(#aegisGlow)"
               style={{ transition: "all 0.04s ease" }}
             />
           ))}
@@ -415,7 +415,7 @@ export const JarvisCore: React.FC<JarvisCoreProps> = ({
                 cy={y}
                 r={2 + (audioEnergy > 0 ? audioEnergy * 2.5 : 0)}
                 fill={stateConfig.primaryColor}
-                filter="url(#jarvisGlow)"
+                filter="url(#aegisGlow)"
                 style={{ transition: "r 0.05s ease" }}
               />
             );
@@ -427,23 +427,23 @@ export const JarvisCore: React.FC<JarvisCoreProps> = ({
           cx={size / 2}
           cy={size / 2}
           r={size * 0.22 * stateConfig.pulseScale}
-          fill="url(#jarvisPlasmaGrad)"
+          fill="url(#aegisPlasmaGrad)"
           stroke={stateConfig.primaryColor}
           strokeWidth="2.2"
-          filter="url(#jarvisGlow)"
+          filter="url(#aegisGlow)"
           style={{
             transformOrigin: "center center",
             transition: "r 0.08s ease, fill 0.3s ease, stroke 0.3s ease",
           }}
         />
 
-        {/* Inner Arc Reactor Hexagonal Lattice Cell */}
+        {/* Inner Hexagonal Cell */}
         <circle
           cx={size / 2}
           cy={size / 2}
           r={size * 0.13}
           fill="none"
-          stroke={isLight ? "#ffffff" : "#ffffff"}
+          stroke="#ffffff"
           strokeWidth="1.2"
           strokeOpacity="0.8"
           strokeDasharray="6 3"

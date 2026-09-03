@@ -1,5 +1,5 @@
 /* =========================================================
-   AEGIS // J.A.R.V.I.S. HUD THEME & ANIMATION ENGINE
+   AEGIS // J.A.R.V.I.S. HUD THEME & SUPER ANIMATION SYSTEM
    ========================================================= */
 
 :root {
@@ -7,22 +7,20 @@
   --font-tech: 'Rajdhani', -apple-system, sans-serif;
   --font-code: 'DM Mono', monospace;
   --font-sans: 'Outfit', -apple-system, sans-serif;
-}
 
-/* ── Dark Theme (Cosmic Obsidian & Arc Cyan) ─────────────── */
-[data-theme="dark"] {
-  --bg-deep: #020813;
-  --bg-header: rgba(2, 8, 19, 0.92);
-  --bg-panel: rgba(4, 15, 30, 0.78);
+  /* Default Ultra-Deep Dark Mode (Cosmic Obsidian & Arc Cyan) */
+  --bg-deep: #020612;
+  --bg-header: rgba(2, 6, 18, 0.94);
+  --bg-panel: rgba(4, 15, 30, 0.82);
   --bg-panel-solid: #040f1e;
-  --bg-card: rgba(6, 22, 44, 0.7);
-  --bg-input: rgba(4, 14, 28, 0.9);
+  --bg-card: rgba(5, 18, 38, 0.75);
+  --bg-input: rgba(3, 12, 26, 0.92);
 
   --cyan-glow: #00f0ff;
   --cyan-dim: #0284c7;
-  --cyan-border: rgba(0, 240, 255, 0.22);
-  --cyan-border-active: rgba(0, 240, 255, 0.65);
-  --cyan-hover: rgba(0, 240, 255, 0.15);
+  --cyan-border: rgba(0, 240, 255, 0.25);
+  --cyan-border-active: rgba(0, 240, 255, 0.75);
+  --cyan-hover: rgba(0, 240, 255, 0.12);
 
   --blue-core: #3b82f6;
   --blue-deep: #1d4ed8;
@@ -31,29 +29,29 @@
   --red-hazard: #ef4444;
   --green-online: #10b981;
 
-  --text-main: #f1f5f9;
+  --text-main: #f8fafc;
   --text-secondary: #cbd5e1;
   --text-muted: #64748b;
   --text-dim: #334155;
   --text-cyan: #38bdf8;
-  --grid-line: rgba(0, 240, 255, 0.035);
-  --vignette: radial-gradient(circle at center, transparent 40%, rgba(2, 8, 19, 0.88) 100%);
-  --shadow-glow: rgba(0, 240, 255, 0.2);
+  --grid-line: rgba(0, 240, 255, 0.04);
+  --vignette: radial-gradient(circle at center, transparent 35%, rgba(2, 6, 18, 0.92) 100%);
+  --shadow-glow: rgba(0, 240, 255, 0.25);
 }
 
 /* ── Light Theme (Titanium Stark Frost & Electric Blue) ─── */
 [data-theme="light"] {
   --bg-deep: #f0f4f9;
   --bg-header: rgba(255, 255, 255, 0.94);
-  --bg-panel: rgba(255, 255, 255, 0.85);
+  --bg-panel: rgba(255, 255, 255, 0.88);
   --bg-panel-solid: #ffffff;
-  --bg-card: rgba(241, 245, 249, 0.88);
-  --bg-input: rgba(255, 255, 255, 0.95);
+  --bg-card: rgba(241, 245, 249, 0.92);
+  --bg-input: rgba(255, 255, 255, 0.96);
 
   --cyan-glow: #0284c7;
   --cyan-dim: #0369a1;
-  --cyan-border: rgba(2, 132, 199, 0.28);
-  --cyan-border-active: rgba(2, 132, 199, 0.7);
+  --cyan-border: rgba(2, 132, 199, 0.3);
+  --cyan-border-active: rgba(2, 132, 199, 0.75);
   --cyan-hover: rgba(2, 132, 199, 0.12);
 
   --blue-core: #2563eb;
@@ -68,23 +66,22 @@
   --text-muted: #64748b;
   --text-dim: #94a3b8;
   --text-cyan: #0284c7;
-  --grid-line: rgba(2, 132, 199, 0.04);
-  --vignette: radial-gradient(circle at center, transparent 50%, rgba(226, 232, 240, 0.5) 100%);
-  --shadow-glow: rgba(2, 132, 199, 0.15);
+  --grid-line: rgba(2, 132, 199, 0.045);
+  --vignette: radial-gradient(circle at center, transparent 50%, rgba(226, 232, 240, 0.55) 100%);
+  --shadow-glow: rgba(2, 132, 199, 0.18);
 }
 
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
 }
 
 html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: var(--bg-deep);
+  background-color: var(--bg-deep) !important;
   color: var(--text-main);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -106,17 +103,33 @@ html, body, #root {
   background: var(--cyan-glow);
 }
 
-/* ── Sci-Fi Holographic Grid & Scanlines ────────────────── */
+/* ── Sci-Fi Holographic Grid & Animated Radar Sweep ────── */
 .hud-grid-background {
   position: absolute;
   inset: 0;
   background-image: 
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 36px 36px;
+  background-size: 40px 40px;
   background-position: center center;
   pointer-events: none;
   z-index: 0;
+}
+
+.hud-radar-sweep {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 800px;
+  height: 800px;
+  margin-top: -400px;
+  margin-left: -400px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 300deg, var(--cyan-hover) 360deg);
+  animation: radarSweep 10s linear infinite;
+  pointer-events: none;
+  opacity: 0.6;
+  z-index: 1;
 }
 
 .hud-scanlines {
@@ -124,11 +137,11 @@ html, body, #root {
   inset: 0;
   background: linear-gradient(
     rgba(18, 16, 16, 0) 50%, 
-    rgba(0, 0, 0, 0.08) 50%
+    rgba(0, 0, 0, 0.1) 50%
   );
   background-size: 100% 4px;
   pointer-events: none;
-  opacity: 0.35;
+  opacity: 0.3;
   z-index: 1;
 }
 
@@ -141,6 +154,11 @@ html, body, #root {
 }
 
 /* ── Super Animations Engine ───────────────────────────── */
+@keyframes radarSweep {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 @keyframes spinClockwise {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
@@ -151,17 +169,6 @@ html, body, #root {
   to   { transform: rotate(-360deg); }
 }
 
-@keyframes pulseGlow {
-  0%, 100% {
-    opacity: 0.9;
-    filter: drop-shadow(0 0 16px var(--cyan-glow));
-  }
-  50% {
-    opacity: 0.45;
-    filter: drop-shadow(0 0 6px var(--cyan-glow));
-  }
-}
-
 @keyframes coreShockwave {
   0% {
     r: 10px;
@@ -169,7 +176,7 @@ html, body, #root {
     stroke-width: 4px;
   }
   100% {
-    r: 190px;
+    r: 210px;
     opacity: 0;
     stroke-width: 0.5px;
   }
@@ -177,27 +184,22 @@ html, body, #root {
 
 @keyframes soundwaveRipples {
   0% {
-    transform: scale(0.85);
-    opacity: 0.8;
+    transform: scale(0.8);
+    opacity: 0.85;
   }
   50% {
-    transform: scale(1.15);
-    opacity: 0.4;
+    transform: scale(1.2);
+    opacity: 0.45;
   }
   100% {
-    transform: scale(1.4);
+    transform: scale(1.5);
     opacity: 0;
   }
 }
 
-@keyframes orbitParticle {
-  0%   { transform: rotate(0deg) translateX(130px) rotate(0deg); }
-  100% { transform: rotate(360deg) translateX(130px) rotate(-360deg); }
-}
-
 @keyframes textShimmer {
   0% { color: var(--text-cyan); text-shadow: 0 0 6px var(--cyan-glow); }
-  50% { color: var(--cyan-glow); text-shadow: 0 0 14px var(--cyan-glow); }
+  50% { color: var(--cyan-glow); text-shadow: 0 0 16px var(--cyan-glow); }
   100% { color: var(--text-cyan); text-shadow: 0 0 6px var(--cyan-glow); }
 }
 
@@ -221,17 +223,17 @@ html, body, #root {
   position: relative;
   background: var(--bg-card);
   border: 1px solid var(--cyan-border);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
 }
 
 .hud-corner-box::before,
 .hud-corner-box::after {
   content: '';
   position: absolute;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-color: var(--cyan-glow);
   pointer-events: none;
 }
@@ -275,7 +277,7 @@ html, body, #root {
 .hud-btn:hover {
   background: var(--cyan-border);
   border-color: var(--cyan-glow);
-  box-shadow: 0 0 12px var(--shadow-glow);
+  box-shadow: 0 0 14px var(--shadow-glow);
   color: var(--text-main);
   transform: translateY(-1px);
 }
@@ -288,19 +290,19 @@ html, body, #root {
   background: var(--cyan-border-active);
   border-color: var(--cyan-glow);
   color: #fff;
-  box-shadow: 0 0 16px var(--shadow-glow);
+  box-shadow: 0 0 18px var(--shadow-glow);
 }
 
 .hud-btn-danger {
   background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.35);
+  border: 1px solid rgba(239, 68, 68, 0.4);
   color: var(--red-hazard);
 }
 
 .hud-btn-danger:hover {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.3);
   border-color: var(--red-hazard);
-  box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45);
   color: #fff;
 }
 
@@ -308,8 +310,8 @@ html, body, #root {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;

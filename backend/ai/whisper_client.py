@@ -1,5 +1,5 @@
 import logging
-from faster_whisper import WhisperModel
+from faster_whisper import WhisperModel  # type: ignore
 
 log = logging.getLogger("aegis.whisper")
 
