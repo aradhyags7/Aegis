@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field  # type: ignore
 
 from ai.ollama_client import ollama, memory, MODEL
 from ai.whisper_client import transcribe
+from ai import pc_controller
+from ai.tools import execute_tool
 import tempfile
 import os
 
@@ -30,6 +32,11 @@ class AskRequest(BaseModel):
     session_id: str = Field(default="default", min_length=1, max_length=64)
     model: str | None = Field(default=None, description="Optional model override")
     web_search: bool = Field(default=True, description="Enable real-time internet search augmentation")
+    tools: bool = Field(default=True, description="Enable native PC control tools")
+
+class ToolExecutionRequest(BaseModel):
+    tool: str
+    args: dict = Field(default_factory=dict)
 
 class AskResponse(BaseModel):
     response: str
@@ -171,6 +178,7 @@ async def ask_get(
     session_id: str = Depends(validate_session),
     model: str | None = Query(default=None, description="Optional model override"),
     web_search: bool = Query(default=True, description="Enable web search"),
+    tools: bool = Query(default=True, description="Enable PC control tools"),
 ):
     """
     Kept for backward compatibility with the original frontend.
@@ -182,6 +190,7 @@ async def ask_get(
         session_id,
         model=active_model,
         enable_web_search=web_search,
+        enable_tools=tools,
     )
     return AskResponse(
         response=response_text,
@@ -199,6 +208,7 @@ async def ask_post(body: AskRequest):
         body.session_id,
         model=active_model,
         enable_web_search=body.web_search,
+        enable_tools=body.tools,
     )
     return AskResponse(
         response=response_text,
@@ -218,11 +228,13 @@ async def ask_stream(
     session_id: str = Depends(validate_session),
     model: str | None = Query(default=None, description="Optional model override"),
     web_search: bool = Query(default=True, description="Enable web search"),
+    tools: bool = Query(default=True, description="Enable PC control tools"),
 ):
     """
-    Streams response tokens as Server-Sent Events.
+    Streams response tokens as Server-Sent Events with live PC action and web search events.
 
     Event format:
+      `data: {"status": "action", "tool": "...", "detail": "..."}`
       `data: {"status": "searching", "query": "..."}`
       `data: {"token": "..."}`
     Final event:
@@ -231,7 +243,9 @@ async def ask_stream(
       `data: {"error": "..."}`
     """
     return StreamingResponse(
-        ollama.stream_generate(prompt, session_id, model=model, enable_web_search=web_search),
+        ollama.stream_generate(
+            prompt, session_id, model=model, enable_web_search=web_search, enable_tools=tools
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control":     "no-cache",
@@ -239,6 +253,28 @@ async def ask_stream(
             "Connection":        "keep-alive",
         },
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# Routes — PC Controller & Hardware Telemetry
+# ─────────────────────────────────────────────────────────────
+
+@app.get("/system/telemetry", tags=["system"], summary="Get host PC hardware telemetry")
+async def system_telemetry():
+    """Returns real-time CPU, RAM, Battery, Disk and OS telemetry."""
+    return pc_controller.get_system_telemetry()
+
+
+@app.get("/system/volume", tags=["system"], summary="Get current master audio volume")
+async def system_volume():
+    """Returns current volume percentage and mute status."""
+    return pc_controller.get_volume()
+
+
+@app.post("/system/execute", tags=["system"], summary="Directly execute a PC action")
+async def system_execute(body: ToolExecutionRequest):
+    """Directly dispatches a PC control tool action."""
+    return execute_tool(body.tool, body.args)
 
 
 # ─────────────────────────────────────────────────────────────

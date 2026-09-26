@@ -505,6 +505,7 @@ export default function App() {
   const [loading, setLoading]                   = useState(false);
   const [streaming, setStreaming]               = useState(false);
   const [searchStatus, setSearchStatus]         = useState<string | null>(null);
+  const [actionStatus, setActionStatus]         = useState<string | null>(null);
   const [status, setStatus]                     = useState<BackendStatus>("checking");
   const [models, setModels]                     = useState<string[]>([]);
   const [activeModel, setActiveModel]           = useState("llama3");
@@ -654,6 +655,7 @@ export default function App() {
     stopLiveSpeechRecognition();
     ttsRef.current.cancel();
     setSearchStatus(null);
+    setActionStatus(null);
     setLoading(false);
     setStreaming(false);
     setChat(prev => prev.map(m => m.streaming ? { ...m, streaming: false } : m));
@@ -703,6 +705,7 @@ export default function App() {
     setMessage("");
     setLoading(true);
     setSearchStatus(null);
+    setActionStatus(null);
     atBottomRef.current = true;
     updateVoiceState("THINKING");
 
@@ -747,11 +750,23 @@ export default function App() {
           setStreaming(false);
           setLoading(false);
           setSearchStatus(null);
+          setActionStatus(null);
           setChat(prev => prev.map(m => m.id === aiId ? {
             ...m, text: `⚠ ${parsed.error}`, streaming: false
           } : m));
           if (voiceModeRef.current) updateVoiceState("LISTENING");
           else updateVoiceState("IDLE");
+          return;
+        }
+
+        // Live PC Action Events
+        if (parsed.status === "action") {
+          setActionStatus(`${parsed.tool}: ${parsed.detail || "Executing..."}`);
+          return;
+        }
+        if (parsed.status === "action_complete") {
+          setActionStatus(`${parsed.tool} ✓ ${parsed.result || "Done"}`);
+          setTimeout(() => setActionStatus(null), 3500);
           return;
         }
 
@@ -1328,6 +1343,7 @@ export default function App() {
               theme={theme}
               liveTranscript={liveTranscript}
               searchStatus={searchStatus}
+              actionStatus={actionStatus}
               lastUserMessage={lastUserMsg}
               lastAiMessage={lastAiMsg}
               isStreaming={streaming}
@@ -1438,6 +1454,11 @@ export default function App() {
                     </div>
                     <div className="hud-corner-box" style={{ padding: "10px 16px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "10px" }}>
                       <TypingDots />
+                      {actionStatus && (
+                        <span style={{ fontSize: "12.5px", color: "var(--amber-warn)", fontFamily: "'DM Mono', monospace" }}>
+                          ⚡ {actionStatus}
+                        </span>
+                      )}
                       {searchStatus && (
                         <span style={{ fontSize: "12.5px", color: "var(--text-cyan)", fontFamily: "'DM Mono', monospace" }}>
                           🌐 {searchStatus}

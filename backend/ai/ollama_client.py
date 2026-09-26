@@ -20,6 +20,11 @@ from ai.web_search import (
     search_web,
     format_search_context,
 )
+from ai.tools import (
+    fast_path_intent,
+    execute_tool,
+    AEGIS_TOOLS,
+)
 
 # ─────────────────────────────────────────────
 # Config
@@ -41,7 +46,10 @@ Personality:
 - You never use fluffy openers like "Certainly!", "Of course!", or "Great question!".
 - Address the user as "sir" or "ma'am" only occasionally when it feels natural.
 
-Knowledge & Time Grounding:
+Knowledge, PC Control & Time Grounding:
+- You have direct administrative control over the host Windows PC.
+- You can execute actions: adjusting volume, controlling media, launching applications, checking hardware diagnostics (CPU, RAM, Battery, Disk), managing windows, searching files, and running commands.
+- When an action is executed on behalf of the user, an [ACTION EXECUTED: ...] context tag will be provided. Report the confirmation smoothly, concisely, and naturally.
 - You have real-time access to the current date, local system clock, and live internet search.
 - When real-time search results are provided in your context, always rely on them for current events, news, versions, weather, and real-time facts.
 - Cite sources naturally (e.g. [1], [2]) when referencing search facts.
@@ -140,14 +148,22 @@ class OllamaClient:
             log.warning("Could not list models: %s", e)
             return []
 
-    def _build_prompt(self, user_prompt: str, history: list[dict], search_context: str | None = None) -> str:
+    def _build_prompt(
+        self,
+        user_prompt: str,
+        history: list[dict],
+        search_context: str | None = None,
+        action_context: str | None = None,
+    ) -> str:
         """
         Builds a structured prompt with dynamic system clock, system instructions,
-        real-time search context, and multi-turn history.
+        PC action execution context, real-time search context, and multi-turn history.
         """
         time_info = get_system_time_context()
         sys_block = f"{SYSTEM_PROMPT.strip()}\n\n[SYSTEM CLOCK: {time_info}]"
         
+        if action_context:
+            sys_block += f"\n\n{action_context}"
         if search_context:
             sys_block += f"\n\n{search_context}"
 
@@ -165,19 +181,34 @@ class OllamaClient:
         session_id: str,
         model: str | None = None,
         enable_web_search: bool = True,
+        enable_tools: bool = True,
     ) -> str:
         memory.add(session_id, "user", prompt)
         history = memory.get_history(session_id)
 
+        action_context = None
+        if enable_tools:
+            fast_action = fast_path_intent(prompt)
+            if fast_action:
+                tool_name, tool_args = fast_action
+                tool_res = execute_tool(tool_name, tool_args)
+                action_context = (
+                    f"[ACTION EXECUTED ON HOST PC]\n"
+                    f"Tool: {tool_name}\nArguments: {json.dumps(tool_args)}\nResult: {json.dumps(tool_res)}\n"
+                    f"Instruction: Acknowledge this action smoothly, articulately, and concisely."
+                )
+
         search_context = None
-        if enable_web_search:
+        if enable_web_search and not action_context:
             needs_search, query, timelimit = should_search_web(prompt)
             if needs_search:
                 results = await search_web(query, timelimit=timelimit)
                 if results:
                     search_context = format_search_context(query, results)
 
-        full_prompt = self._build_prompt(prompt, history, search_context=search_context)
+        full_prompt = self._build_prompt(
+            prompt, history, search_context=search_context, action_context=action_context
+        )
         target_model = model or MODEL
 
         payload = {
@@ -224,13 +255,29 @@ class OllamaClient:
         session_id: str,
         model: str | None = None,
         enable_web_search: bool = True,
+        enable_tools: bool = True,
     ) -> AsyncGenerator[str, None]:
-        """Yields response tokens as Server-Sent Events with live search status events."""
+        """Yields response tokens as Server-Sent Events with live PC action and search status events."""
         memory.add(session_id, "user", prompt)
         history = memory.get_history(session_id)
 
+        action_context = None
+        if enable_tools:
+            fast_action = fast_path_intent(prompt)
+            if fast_action:
+                tool_name, tool_args = fast_action
+                yield f"data: {json.dumps({'status': 'action', 'tool': tool_name, 'detail': f'Executing {tool_name}...' })}\n\n"
+                tool_res = execute_tool(tool_name, tool_args)
+                status_msg = tool_res.get("message") or ("Success" if tool_res.get("success") else tool_res.get("error", "Completed"))
+                yield f"data: {json.dumps({'status': 'action_complete', 'tool': tool_name, 'result': status_msg})}\n\n"
+                action_context = (
+                    f"[ACTION EXECUTED ON HOST PC]\n"
+                    f"Tool: {tool_name}\nArguments: {json.dumps(tool_args)}\nResult: {json.dumps(tool_res)}\n"
+                    f"Instruction: Acknowledge this action smoothly, articulately, and concisely."
+                )
+
         search_context = None
-        if enable_web_search:
+        if enable_web_search and not action_context:
             needs_search, query, timelimit = should_search_web(prompt)
             if needs_search:
                 # Notify frontend of search execution
@@ -240,7 +287,9 @@ class OllamaClient:
                     yield f"data: {json.dumps({'status': 'search_complete', 'count': len(results)})}\n\n"
                     search_context = format_search_context(query, results)
 
-        full_prompt = self._build_prompt(prompt, history, search_context=search_context)
+        full_prompt = self._build_prompt(
+            prompt, history, search_context=search_context, action_context=action_context
+        )
         target_model = model or MODEL
 
         payload = {

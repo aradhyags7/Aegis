@@ -14,6 +14,7 @@ interface AegisHudViewProps {
   theme: "dark" | "light";
   liveTranscript?: string;
   searchStatus?: string | null;
+  actionStatus?: string | null;
   lastUserMessage?: string;
   lastAiMessage?: string;
   isStreaming: boolean;
@@ -35,6 +36,7 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
   theme,
   liveTranscript,
   searchStatus,
+  actionStatus,
   lastUserMessage,
   lastAiMessage,
   isStreaming,
@@ -150,7 +152,7 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
         }}
       >
         {/* Live Subtitle Transcript Ribbon */}
-        {(displayedUserText || lastAiMessage || isLoading || isStreaming || isRecording || searchStatus) && (
+        {(displayedUserText || lastAiMessage || isLoading || isStreaming || isRecording || searchStatus || actionStatus) && (
           <div
             className="hud-corner-box"
             style={{
@@ -162,9 +164,37 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
               maxHeight: "150px",
               overflowY: "auto",
               boxShadow: "0 0 24px var(--shadow-glow)",
-              border: isRecording ? "1px solid var(--red-hazard)" : "1px solid var(--cyan-border)",
+              border: isRecording ? "1px solid var(--red-hazard)" : actionStatus ? "1px solid var(--amber-warn)" : "1px solid var(--cyan-border)",
             }}
           >
+            {/* Live PC Action Alert */}
+            {actionStatus && (
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <span
+                  style={{
+                    fontFamily: "'Orbitron', monospace",
+                    fontSize: "10px",
+                    color: "var(--amber-warn)",
+                    fontWeight: 700,
+                    letterSpacing: "1px",
+                    flexShrink: 0,
+                  }}
+                >
+                  PC ACTION //
+                </span>
+                <span
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--amber-warn)",
+                    fontFamily: "'DM Mono', monospace",
+                    animation: "textShimmer 1.6s infinite",
+                  }}
+                >
+                  ⚡ {actionStatus}
+                </span>
+              </div>
+            )}
+
             {/* Live Search Status Alert */}
             {searchStatus && (
               <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>

@@ -90,7 +90,7 @@ npm start
 - [x] Phase 1 & 2: Core Assistant, SSE Streaming & Faster-Whisper Voice Pipeline
 - [ ] Phase 3: Wake-word activation ("Hey Aegis") & Continuous listening mode
 - [ ] Phase 4: Long-term persistent memory & Semantic retrieval
-- [ ] Phase 5: Safe desktop tool execution & System controls
+- [x] Phase 5: Safe desktop tool execution & PC controls (Volume, Media, App Orchestration, Hardware Telemetry, File Search, PowerShell Runner)
 - [ ] Phase 6: Vision & Local screenshot analysis
 - [ ] Phase 7: Multi-step agent planning & autonomous execution
 - [ ] Phase 8: Modular plugin and skill ecosystem
