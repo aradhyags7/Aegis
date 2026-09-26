@@ -117,21 +117,57 @@ export function playAudioCue(
 // Robust TTS Controller
 // ─────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────
+// Robust High-Performance Streaming TTS Controller
+// ─────────────────────────────────────────────────────────
+
 export class TTSController {
   private _speaking = false;
+  private _queue: string[] = [];
+  private _streamComplete = false;
   private _onEndCallback: (() => void) | null = null;
   private _currentUtterance: SpeechSynthesisUtterance | null = null;
+  private _rate = 1.3; // Fast, energetic, crisp conversational pace (1.3x)
+  private _voice: SpeechSynthesisVoice | null = null;
 
-  public speak(text: string, onEnd?: () => void) {
-    if (!("speechSynthesis" in window)) {
-      onEnd?.();
-      return;
+  constructor() {
+    this._initVoice();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        this._initVoice();
+      };
     }
+  }
 
-    this.cancel();
+  private _initVoice() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return;
 
-    // Clean text for speech synthesis (strip code blocks, backticks, bold, links, markdown markers)
-    const cleanText = text
+    // Prioritize natural, clear English voices
+    const preferred = voices.find(v => 
+      v.lang.startsWith("en") && (
+        v.name.includes("David") ||
+        v.name.includes("Mark") ||
+        v.name.includes("Natural") ||
+        v.name.includes("Google") ||
+        v.name.includes("Guy")
+      )
+    ) || voices.find(v => v.lang.startsWith("en")) || voices[0];
+
+    this._voice = preferred || null;
+  }
+
+  public setRate(rate: number) {
+    this._rate = Math.max(0.5, Math.min(2.5, rate));
+  }
+
+  public getRate(): number {
+    return this._rate;
+  }
+
+  private _cleanText(text: string): string {
+    return text
       .replace(/```[\s\S]*?```/g, "Code block omitted.")
       .replace(/`([^`]+)`/g, "$1")
       .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -140,21 +176,68 @@ export class TTSController {
       .replace(/^[-*]\s+/gm, "")
       .replace(/^\d+\.\s+/gm, "")
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\s+/g, " ")
       .trim();
+  }
 
-    if (!cleanText) {
+  /**
+   * Enqueues a single completed sentence for immediate streaming playback.
+   */
+  public enqueueSentence(rawSentence: string) {
+    if (!("speechSynthesis" in window)) return;
+    const clean = this._cleanText(rawSentence);
+    if (!clean) return;
+
+    this._queue.push(clean);
+    if (!this._speaking) {
+      this._playNext();
+    }
+  }
+
+  /**
+   * Marks that token streaming from the LLM has finished for this turn.
+   */
+  public markStreamComplete(onEnd?: () => void) {
+    this._streamComplete = true;
+    this._onEndCallback = onEnd || null;
+
+    if (!this._speaking && this._queue.length === 0) {
+      const cb = this._onEndCallback;
+      this._onEndCallback = null;
+      this._streamComplete = false;
+      cb?.();
+    }
+  }
+
+  private _playNext() {
+    if (this._queue.length === 0) {
       this._speaking = false;
-      onEnd?.();
+      this._currentUtterance = null;
+      if (this._streamComplete) {
+        const cb = this._onEndCallback;
+        this._onEndCallback = null;
+        this._streamComplete = false;
+        cb?.();
+      }
+      return;
+    }
+
+    const nextText = this._queue.shift();
+    if (!nextText) {
+      this._playNext();
       return;
     }
 
     this._speaking = true;
-    this._onEndCallback = onEnd || null;
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 1.0;
+    const utterance = new SpeechSynthesisUtterance(nextText);
+    utterance.rate = this._rate;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
+
+    if (this._voice) {
+      utterance.voice = this._voice;
+    }
+
     this._currentUtterance = utterance;
 
     utterance.onstart = () => {
@@ -164,32 +247,61 @@ export class TTSController {
     utterance.onend = () => {
       this._speaking = false;
       this._currentUtterance = null;
-      const cb = this._onEndCallback;
-      this._onEndCallback = null;
-      cb?.();
+      this._playNext();
     };
 
     utterance.onerror = (e) => {
       this._speaking = false;
       this._currentUtterance = null;
-      const cb = this._onEndCallback;
-      this._onEndCallback = null;
-      // Do not trigger error if it was a user cancel/interruption
       if (e.error !== "canceled" && e.error !== "interrupted") {
-        cb?.();
+        this._playNext();
       }
     };
 
     window.speechSynthesis.speak(utterance);
   }
 
-  public cancel() {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+  /**
+   * Complete single-shot speak method.
+   */
+  public speak(text: string, onEnd?: () => void) {
+    if (!("speechSynthesis" in window)) {
+      onEnd?.();
+      return;
     }
+
+    this.cancel();
+    const cleanText = this._cleanText(text);
+
+    if (!cleanText) {
+      this._speaking = false;
+      onEnd?.();
+      return;
+    }
+
+    // Split text into fast sentence chunks
+    const sentences = cleanText.split(/(?<=[.!?:\n])\s+/).filter(s => s.trim().length > 0);
+    if (sentences.length === 0) {
+      onEnd?.();
+      return;
+    }
+
+    for (const s of sentences) {
+      this.enqueueSentence(s);
+    }
+    this.markStreamComplete(onEnd);
+  }
+
+  public cancel() {
+    this._queue = [];
+    this._streamComplete = false;
     this._speaking = false;
     this._currentUtterance = null;
     this._onEndCallback = null;
+
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
   }
 
   public isSpeaking(): boolean {

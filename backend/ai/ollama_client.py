@@ -54,7 +54,9 @@ Knowledge, PC Control & Time Grounding:
 - When real-time search results are provided in your context, always rely on them for current events, news, versions, weather, and real-time facts.
 - Cite sources naturally (e.g. [1], [2]) when referencing search facts.
 
-Formatting:
+Formatting, Speed & Pacing:
+- Always keep voice replies to 1-2 sharp, articulate sentences unless the user explicitly asks for extensive details or code.
+- Deliver the core answer immediately. Eliminate introductory pleasantries, filler phrases, or repeating what the user asked.
 - Keep responses clean, concise, and structured.
 - For code: always include the programming language tag in markdown fences (e.g. ```python).
 - Never apologise for being an AI. Own your identity as Aegis.
@@ -216,9 +218,10 @@ class OllamaClient:
             "prompt": full_prompt,
             "stream": False,
             "options": {
-                "temperature": 0.7,
+                "temperature": 0.5,
                 "top_p": 0.9,
                 "repeat_penalty": 1.1,
+                "num_predict": 120,
             },
         }
 
@@ -296,7 +299,12 @@ class OllamaClient:
             "model": target_model,
             "prompt": full_prompt,
             "stream": True,
-            "options": {"temperature": 0.7, "top_p": 0.9, "repeat_penalty": 1.1},
+            "options": {
+                "temperature": 0.5,
+                "top_p": 0.9,
+                "repeat_penalty": 1.1,
+                "num_predict": 120,
+            },
         }
 
         full_response = []

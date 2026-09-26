@@ -717,6 +717,7 @@ export default function App() {
 
     let buffer = "";
     let gotFirstToken = false;
+    let spokenUpToIndex = 0;
 
     es.onmessage = (event) => {
       if (event.data === "[DONE]") {
@@ -728,9 +729,13 @@ export default function App() {
         setChat(prev => prev.map(m => m.id === aiId ? { ...m, streaming: false } : m));
 
         const shouldSpeak = fromVoice || voiceModeRef.current;
-        if (shouldSpeak && buffer.trim()) {
-          updateVoiceState("SPEAKING");
-          ttsRef.current.speak(buffer.trim(), () => {
+        if (shouldSpeak) {
+          const remaining = buffer.slice(spokenUpToIndex).trim();
+          if (remaining.length > 0) {
+            updateVoiceState("SPEAKING");
+            ttsRef.current.enqueueSentence(remaining);
+          }
+          ttsRef.current.markStreamComplete(() => {
             if (voiceModeRef.current) {
               updateVoiceState("LISTENING");
             } else {
@@ -751,6 +756,7 @@ export default function App() {
           setLoading(false);
           setSearchStatus(null);
           setActionStatus(null);
+          ttsRef.current.cancel();
           setChat(prev => prev.map(m => m.id === aiId ? {
             ...m, text: `⚠ ${parsed.error}`, streaming: false
           } : m));
@@ -788,10 +794,22 @@ export default function App() {
             gotFirstToken = true;
             setLoading(false);
             setStreaming(true);
-            updateVoiceState("SPEAKING");
             setChat(prev => [...prev, { id: aiId, sender: "ai", text: buffer, timestamp: Date.now(), streaming: true }]);
           } else {
             setChat(prev => prev.map(m => m.id === aiId ? { ...m, text: buffer } : m));
+          }
+
+          // Near-Instant Streaming Sentence TTS
+          const shouldSpeak = fromVoice || voiceModeRef.current;
+          if (shouldSpeak) {
+            const unhandled = buffer.slice(spokenUpToIndex);
+            const sentenceMatch = unhandled.match(/^(.*?[.!?\n])(?:\s+|$)/);
+            if (sentenceMatch && sentenceMatch[1].trim().length > 1) {
+              const sentenceToSpeak = sentenceMatch[1].trim();
+              spokenUpToIndex += sentenceMatch[0].length;
+              updateVoiceState("SPEAKING");
+              ttsRef.current.enqueueSentence(sentenceToSpeak);
+            }
           }
         }
       } catch { /* ignore */ }
