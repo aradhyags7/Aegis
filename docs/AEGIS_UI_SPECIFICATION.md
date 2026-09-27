@@ -67,22 +67,24 @@ stateDiagram-v2
 ```
 
 #### Physical Geometry & Layout
-- **Dimensions**: Precise circular form factor scaled to **50% of screen minimum dimension** (`min(50vw, 50vh)`, approx. `520px × 520px` at 1080p).
+- **Dimensions**: Precise circular form factor scaled to **50% of screen minimum dimension** (`min(50vw, 50vh)`, responsive up to `520px × 520px`).
 - **Positioning**: Center-anchored with zero z-drift on screen center (`top: 50%`, `left: 50%`, `transform: translate(-50%, -50%)`).
+- **Resolution**: High-DPI hardware scaled (`window.devicePixelRatio`) with native 60–120 FPS `requestAnimationFrame` render loop.
 
 #### Material & Shaders
-- **Substrate Layer**: Semi-transparent crystalline lattice with 18% opacity dark base (`rgba(0, 240, 255, 0.08)`).
-- **Specular Refraction**: Dual-stage internal Fresnel rim highlight (`box-shadow: inset 0 0 45px rgba(0, 240, 255, 0.45), inset 0 0 100px rgba(139, 92, 246, 0.2)`).
-- **Surface Texture**: Multi-layered SVG metallic arc segments with 0.85 opacity and high refractive sharpness (`backdrop-filter: blur(16px)`).
-- **Edge Filaments**: 24 vector-rendered micro-filament lines evenly distributed around the circumference (length: 18px–32px), with animating stroke offsets pointing toward the mathematical center of AEGIS.
+- **Substrate Layer**: High-performance HTML5 Canvas rendering context with dual-pass radial gradients (`rgba(10, 30, 60, 0.95)` to `rgba(0, 8, 20, 0.98)`).
+- **Specular Refraction**: 3D parabolic specular highlight with interactive mouse magnetic parallax (`mx * 18px`, `my * 18px`).
+- **Surface Texture**: Crystalline polygon lattice facets with dynamic light refraction and additive color blending (`globalCompositeOperation = 'lighter'`).
+- **Living Plasma Filaments**: 28 procedural sinusoidal filaments rooted at the crystal rim that undulate, twist, and drift toward the central singularity nucleus, reacting dynamically to real-time microphone and speech energy (`audioEnergy`).
+- **Nucleus Singularity**: White-hot central plasma core with high-tech monogram and radial energy flares.
 
 #### Animation & Dynamic States
 | State | Scale Factor | Core Color | Pulse Period | Visual Dynamic |
 | :--- | :--- | :--- | :--- | :--- |
-| **IDLE** | `1.00 ± 0.02` | Cyan (`#00F0FF`) | `1.50s` (Sine Ease) | Soft breathing glow, micro-filaments slowly drift inward at 2px/s. |
-| **LISTENING** | `1.04 ± 0.06` | Cyan $\rightarrow$ Aquamarine | Audio Amplitude Linked | Edge reacts directly to real-time microphone RMS volume. |
-| **PUFF / INGEST** | `1.16` | Bright White-Cyan (`#E0FFFF`) | `240ms` (Cubic-Bezier) | **Puff explosion**: instantaneous expansion outward, emitting 2 radial shockwave rings. |
-| **PROCESSING** | `1.08 ± 0.03` | Violet $\rightarrow$ Amber Cycle | `0.80s` | High-frequency internal plasma shimmer; filaments orbit clockwise. |
+| **IDLE** | `1.00 ± 0.02` | Cyan (`#00F0FF`) | `1.50s` (Sine Wave) | Soft breathing glow, micro-filaments slowly drift inward at 2px/s. |
+| **LISTENING** | `1.04 ± 0.06` | Cyan $\rightarrow$ Aquamarine | Audio Amplitude Linked | Edge reacts directly to real-time microphone RMS volume; filaments excite outward. |
+| **PUFF / INGEST** | `1.16` | Bright White-Cyan (`#E0FFFF`) | `240ms` (Physics Particle Burst) | **Puff explosion**: instantaneous expansion outward, emitting 65+ radiant spark particles and dual expanding shockwaves. |
+| **PROCESSING** | `1.08 ± 0.03` | Violet $\rightarrow$ Amber Cycle | `0.80s` | High-frequency internal plasma shimmer; filaments orbit clockwise at 2.4x speed. |
 | **SPEAKING** | `1.05 ± 0.04` | Crisp Cyan-Violet | TTS Audio Envelope | Core pulses in sync with phoneme synthesis; exterior halo flares outward. |
 | **ALERT / ERROR** | `1.12` | Arc Crimson (`#EF4444`) | `0.45s` Strobe | Sharp warning pulse with edge filament distortion and red outer bloom. |
 
@@ -249,10 +251,11 @@ This matrix governs how all 5 components transition in absolute synchronization 
 ## 4. Technical Implementation Architecture
 
 ### Technology Stack Mapping
-- **Rendering Engine**: React 19 + SVG DOM overlays (for crisp spatial graphics and zero runtime bundle overhead).
+- **Rendering Engine**: HTML5 High-DPI 2D Canvas (for 60–120 FPS volumetric crystal orb, living plasma filaments, and particle physics) + React 19 Glassmorphic DOM overlays (for crisp spatial graphics).
 - **Shader Pipeline**:
-  - Multi-tier radial and linear gradients simulating refraction (`#aegisCrystalGrad`, `#aegisGlassSpecular`).
-  - Additive screen blend modes (`mix-blend-mode: screen`) with GPU compositing layers.
+  - Multi-pass radial gradients simulating 3D spherical refraction and Fresnel rim lighting.
+  - Additive blending (`globalCompositeOperation = 'lighter'` and `'screen'`) for radiant particle bursts and energy conduits.
+  - 3D mouse parallax tracking for dynamic specular glints.
 - **Audio Engine**: Native Web Audio API (`AudioContext`) with procedural sound synthesis (`AegisHarmonicSynthesizer`).
 - **Kinetics**: Hardware-accelerated CSS 3D transforms (`transform: translate3d(...)`) with GPU compositing layers.
 
