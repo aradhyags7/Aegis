@@ -12,3 +12,5 @@ pycaw>=20240000
 comtypes>=1.4.0
 pillow>=10.0.0
 mss>=10.0.0
+pywin32>=312
+
