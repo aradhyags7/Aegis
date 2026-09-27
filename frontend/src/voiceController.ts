@@ -24,7 +24,7 @@ export type VoiceState =
 // ─────────────────────────────────────────────────────────
 
 export function playAudioCue(
-  kind: "activated" | "deactivated" | "speech_start" | "speech_stop" | "interrupted" | "error",
+  kind: "activated" | "deactivated" | "speech_start" | "speech_stop" | "interrupted" | "error" | "command_success",
   enabled = true
 ) {
   if (!enabled) return;
@@ -51,6 +51,18 @@ export function playAudioCue(
         osc.stop(now + 0.16);
         break;
       }
+      case "command_success": {
+        // Ascending 3-tone Stark Arpeggio (520Hz -> 680Hz -> 840Hz)
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.setValueAtTime(680, now + 0.06);
+        osc.frequency.setValueAtTime(840, now + 0.12);
+        gain.gain.setValueAtTime(0.065, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.20);
+        osc.start(now);
+        osc.stop(now + 0.20);
+        break;
+      }
       case "deactivated": {
         // Descending chime (680Hz -> 480Hz)
         osc.type = "sine";
@@ -63,7 +75,7 @@ export function playAudioCue(
         break;
       }
       case "speech_start": {
-        // Subtle high pip (880Hz)
+        // Pure high sine pip (880Hz)
         osc.type = "sine";
         osc.frequency.setValueAtTime(880, now);
         gain.gain.setValueAtTime(0.05, now);
@@ -94,13 +106,14 @@ export function playAudioCue(
         break;
       }
       case "error": {
-        // Low alert warble (260Hz)
+        // Resonant sawtooth warning buzz (260Hz -> 180Hz)
         osc.type = "sawtooth";
         osc.frequency.setValueAtTime(260, now);
-        gain.gain.setValueAtTime(0.04, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        osc.frequency.exponentialRampToValueAtTime(180, now + 0.24);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
         osc.start(now);
-        osc.stop(now + 0.22);
+        osc.stop(now + 0.24);
         break;
       }
     }
@@ -112,6 +125,74 @@ export function playAudioCue(
     // Non-critical
   }
 }
+
+// ─────────────────────────────────────────────────────────
+// Procedural Harmonic Ambient Synthesizer (110Hz + 220Hz Drone)
+// ─────────────────────────────────────────────────────────
+
+export class AegisHarmonicSynthesizer {
+  private _ctx: AudioContext | null = null;
+  private _osc1: OscillatorNode | null = null;
+  private _osc2: OscillatorNode | null = null;
+  private _gain: GainNode | null = null;
+  private _isRunning = false;
+
+  public start(enabled = true) {
+    if (!enabled || this._isRunning) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      this._ctx = new AudioCtx();
+      const now = this._ctx.currentTime;
+
+      this._osc1 = this._ctx.createOscillator();
+      this._osc2 = this._ctx.createOscillator();
+      this._gain = this._ctx.createGain();
+
+      this._osc1.type = "sine";
+      this._osc1.frequency.setValueAtTime(110, now); // Fundamental harmonic
+
+      this._osc2.type = "sine";
+      this._osc2.frequency.setValueAtTime(220, now); // 1st octave harmonic
+
+      // Extremely subtle presence (-38dB)
+      this._gain.gain.setValueAtTime(0.006, now);
+
+      this._osc1.connect(this._gain);
+      this._osc2.connect(this._gain);
+      this._gain.connect(this._ctx.destination);
+
+      this._osc1.start(now);
+      this._osc2.start(now);
+      this._isRunning = true;
+    } catch {
+      // AudioContext policy
+    }
+  }
+
+  public setIntensity(level: number) {
+    if (!this._gain || !this._ctx || !this._isRunning) return;
+    const targetGain = Math.min(0.018, 0.005 + level * 0.012);
+    this._gain.gain.setTargetAtTime(targetGain, this._ctx.currentTime, 0.1);
+  }
+
+  public stop() {
+    if (!this._isRunning) return;
+    try {
+      this._osc1?.stop();
+      this._osc2?.stop();
+      this._ctx?.close().catch(() => {});
+    } catch {
+      /* ignore */
+    }
+    this._isRunning = false;
+    this._ctx = null;
+    this._osc1 = null;
+    this._osc2 = null;
+    this._gain = null;
+  }
+}
+
 
 // ─────────────────────────────────────────────────────────
 // Robust TTS Controller
