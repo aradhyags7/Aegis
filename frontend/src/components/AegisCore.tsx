@@ -25,9 +25,25 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [ripples, setRipples] = useState<ClickRipple[]>([]);
+  const [isPuffing, setIsPuffing] = useState(false);
+  const prevVoiceState = React.useRef(voiceState);
 
-  // Trigger click shockwave animation
+  // Trigger puff effect on command ingestion / state transition
+  React.useEffect(() => {
+    if (prevVoiceState.current !== voiceState) {
+      if (voiceState === "THINKING" || voiceState === "SPEAKING") {
+        setIsPuffing(true);
+        const t = setTimeout(() => setIsPuffing(false), 340);
+        return () => clearTimeout(t);
+      }
+      prevVoiceState.current = voiceState;
+    }
+  }, [voiceState]);
+
+  // Trigger click shockwave animation and puff
   const handleClick = () => {
+    setIsPuffing(true);
+    setTimeout(() => setIsPuffing(false), 340);
     const newRipple = { id: Date.now(), timestamp: Date.now() };
     setRipples(prev => [...prev, newRipple]);
     setTimeout(() => {
@@ -185,6 +201,24 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
     return particles;
   }, [size]);
 
+  // 24 Neon Convergent Edge Filaments focusing inward toward centroid
+  const edgeFilaments = useMemo(() => {
+    const count = 24;
+    const outerR = size * 0.285;
+    const innerR = size * 0.238;
+    const filaments = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (i * 360) / count;
+      const rad = (angle * Math.PI) / 180;
+      const x1 = size / 2 + Math.cos(rad) * outerR;
+      const y1 = size / 2 + Math.sin(rad) * outerR;
+      const x2 = size / 2 + Math.cos(rad) * innerR;
+      const y2 = size / 2 + Math.sin(rad) * innerR;
+      filaments.push({ id: i, x1, y1, x2, y2 });
+    }
+    return filaments;
+  }, [size]);
+
   return (
     <div
       onClick={handleClick}
@@ -208,8 +242,8 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
       <div
         style={{
           position: "absolute",
-          width: `${size * 0.8}px`,
-          height: `${size * 0.8}px`,
+          width: `${size * 0.85}px`,
+          height: `${size * 0.85}px`,
           borderRadius: "50%",
           background: `radial-gradient(circle, ${stateConfig.glowColor} 0%, rgba(0,0,0,0) 70%)`,
           filter: "blur(28px)",
@@ -218,35 +252,6 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
           pointerEvents: "none",
         }}
       />
-
-      {/* Concentric Speaking/Listening Soundwave Ripples */}
-      {(voiceState === "SPEAKING" || voiceState === "RECORDING") && (
-        <>
-          <div
-            style={{
-              position: "absolute",
-              width: `${size * 0.7}px`,
-              height: `${size * 0.7}px`,
-              borderRadius: "50%",
-              border: `2px solid ${stateConfig.primaryColor}`,
-              animation: "soundwaveRipples 2s cubic-bezier(0, 0.2, 0.8, 1) infinite",
-              pointerEvents: "none",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              width: `${size * 0.7}px`,
-              height: `${size * 0.7}px`,
-              borderRadius: "50%",
-              border: `1.5px solid ${stateConfig.primaryColor}`,
-              animation: "soundwaveRipples 2s cubic-bezier(0, 0.2, 0.8, 1) infinite",
-              animationDelay: "0.6s",
-              pointerEvents: "none",
-            }}
-          />
-        </>
-      )}
 
       {/* SVG Arc Reactor Canvas */}
       <svg
@@ -264,6 +269,20 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
             <stop offset="0%" stopColor={stateConfig.primaryColor} stopOpacity="0.95" />
             <stop offset="60%" stopColor={stateConfig.secondaryColor} stopOpacity="0.8" />
             <stop offset="100%" stopColor={isLight ? "#f0f4f9" : "#020813"} stopOpacity="0.95" />
+          </linearGradient>
+
+          {/* Crystalline Glass & Refraction Gradient */}
+          <radialGradient id="aegisCrystalGrad" cx="35%" cy="30%" r="70%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.65" />
+            <stop offset="25%" stopColor={stateConfig.primaryColor} stopOpacity="0.45" />
+            <stop offset="70%" stopColor={stateConfig.secondaryColor} stopOpacity="0.8" />
+            <stop offset="100%" stopColor={isLight ? "#e2e8f0" : "#020813"} stopOpacity="0.95" />
+          </radialGradient>
+
+          {/* Specular Glare Highlight */}
+          <linearGradient id="aegisGlassSpecular" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.0" />
           </linearGradient>
 
           <filter id="aegisGlow" x="-50%" y="-50%" width="200%" height="200%">
@@ -422,26 +441,82 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
           })}
         </g>
 
-        {/* 5. Inner Arc Core Reactor Plasma Orb */}
+        {/* 5. 24 Neon Convergent Edge Filaments */}
+        <g>
+          {edgeFilaments.map((f) => (
+            <line
+              key={f.id}
+              x1={f.x1}
+              y1={f.y1}
+              x2={f.x2}
+              y2={f.y2}
+              stroke={stateConfig.primaryColor}
+              strokeWidth="1.2"
+              strokeOpacity="0.75"
+              strokeDasharray="4 2"
+              style={{
+                animation: "filamentConverge 2s ease-in-out infinite",
+                animationDelay: `${(f.id % 4) * 0.25}s`,
+              }}
+            />
+          ))}
+        </g>
+
+        {/* Puff Expansion Shockwave Rings */}
+        {isPuffing && (
+          <>
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={size * 0.24}
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth="2.5"
+              style={{ animation: "radialShockwave 0.35s ease-out forwards" }}
+            />
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={size * 0.24}
+              fill="none"
+              stroke={stateConfig.primaryColor}
+              strokeWidth="1.8"
+              style={{ animation: "radialShockwave 0.45s ease-out 0.08s forwards" }}
+            />
+          </>
+        )}
+
+        {/* 6. Central Crystalline Glass Orb (The Brain of AEGIS) */}
         <circle
           cx={size / 2}
           cy={size / 2}
-          r={size * 0.22 * stateConfig.pulseScale}
-          fill="url(#aegisPlasmaGrad)"
+          r={size * 0.235 * stateConfig.pulseScale * (isPuffing ? 1.16 : 1)}
+          fill="url(#aegisCrystalGrad)"
           stroke={stateConfig.primaryColor}
-          strokeWidth="2.2"
+          strokeWidth="2.4"
           filter="url(#aegisGlow)"
           style={{
             transformOrigin: "center center",
-            transition: "r 0.08s ease, fill 0.3s ease, stroke 0.3s ease",
+            transition: "r 0.1s cubic-bezier(0.16, 1, 0.3, 1), fill 0.3s ease, stroke 0.3s ease",
           }}
+        />
+
+        {/* Specular Crystal Glass Highlight */}
+        <ellipse
+          cx={size / 2 - size * 0.05}
+          cy={size / 2 - size * 0.06}
+          rx={size * 0.11}
+          ry={size * 0.065}
+          fill="url(#aegisGlassSpecular)"
+          opacity="0.65"
+          style={{ pointerEvents: "none" }}
         />
 
         {/* Inner Hexagonal Cell */}
         <circle
           cx={size / 2}
           cy={size / 2}
-          r={size * 0.13}
+          r={size * 0.135}
           fill="none"
           stroke="#ffffff"
           strokeWidth="1.2"
