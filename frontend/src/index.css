@@ -132,15 +132,17 @@ html, body, #root {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 800px;
-  height: 800px;
-  margin-top: -400px;
-  margin-left: -400px;
+  width: 960px;
+  height: 960px;
+  margin-top: -480px;
+  margin-left: -480px;
   border-radius: 50%;
-  background: conic-gradient(from 0deg, transparent 0deg, transparent 300deg, var(--cyan-hover) 360deg);
-  animation: radarSweep 10s linear infinite;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 310deg, rgba(0, 240, 255, 0.09) 360deg);
+  mask-image: radial-gradient(circle, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 68%);
+  -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 68%);
+  animation: radarSweep 14s linear infinite;
   pointer-events: none;
-  opacity: 0.6;
+  opacity: 0.55;
   z-index: 1;
 }
 

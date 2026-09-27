@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { VoiceState } from "../voiceController";
 
 interface AegisCoreProps {
@@ -10,9 +10,25 @@ interface AegisCoreProps {
   size?: number;
 }
 
-interface ClickRipple {
-  id: number;
-  timestamp: number;
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  alpha: number;
+  color: string;
+  life: number;
+  maxLife: number;
+}
+
+interface Shockwave {
+  radius: number;
+  maxRadius: number;
+  alpha: number;
+  width: number;
+  color: string;
+  speed: number;
 }
 
 export const AegisCore: React.FC<AegisCoreProps> = ({
@@ -21,240 +37,557 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
   isVoiceMode,
   theme = "dark",
   onCoreClick,
-  size = 350,
+  size = 460,
 }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
-  const [ripples, setRipples] = useState<ClickRipple[]>([]);
-  const [isPuffing, setIsPuffing] = useState(false);
-  const prevVoiceState = React.useRef(voiceState);
 
-  // Trigger puff effect on command ingestion / state transition
-  React.useEffect(() => {
-    if (prevVoiceState.current !== voiceState) {
-      if (voiceState === "THINKING" || voiceState === "SPEAKING") {
-        setIsPuffing(true);
-        const t = setTimeout(() => setIsPuffing(false), 340);
-        return () => clearTimeout(t);
-      }
-      prevVoiceState.current = voiceState;
-    }
-  }, [voiceState]);
-
-  // Trigger click shockwave animation and puff
-  const handleClick = () => {
-    setIsPuffing(true);
-    setTimeout(() => setIsPuffing(false), 340);
-    const newRipple = { id: Date.now(), timestamp: Date.now() };
-    setRipples(prev => [...prev, newRipple]);
-    setTimeout(() => {
-      setRipples(prev => prev.filter(r => r.id !== newRipple.id));
-    }, 800);
-    onCoreClick?.();
-  };
+  // Animation & Particle state refs
+  const animFrameRef = useRef<number | null>(null);
+  const timeRef = useRef<number>(0);
+  const particlesRef = useRef<Particle[]>([]);
+  const shockwavesRef = useRef<Shockwave[]>([]);
+  const mouseSmoothRef = useRef({ x: 0, y: 0 });
+  const prevVoiceStateRef = useRef<VoiceState>(voiceState);
+  const puffEnergyRef = useRef<number>(0);
 
   const isLight = theme === "light";
 
-  // Determine state-based visual tokens & speeds
-  const stateConfig = useMemo(() => {
-    const hoverMultiplier = isHovered ? 0.45 : 1;
+  // Trigger explosive particle puff burst
+  const triggerPuffExplosion = useCallback((intensity = 1.0) => {
+    puffEnergyRef.current = 1.0;
+    const count = Math.floor(65 * intensity);
+    const primaryColor =
+      voiceState === "RECORDING"
+        ? "#ef4444"
+        : voiceState === "THINKING" || voiceState === "TRANSCRIBING"
+        ? "#8b5cf6"
+        : "#00f0ff";
 
-    switch (voiceState) {
-      case "RECORDING":
-        return {
-          primaryColor: "#ef4444",
-          secondaryColor: "#dc2626",
-          glowColor: "rgba(239, 68, 68, 0.75)",
-          label: "RECORDING // AUDIO_LOCKED",
-          spinSpeedOuter: `${2.8 * hoverMultiplier}s`,
-          spinSpeedInner: `${1.8 * hoverMultiplier}s`,
-          pulseScale: 1 + audioEnergy * 0.45,
-          plasmaGlow: "rgba(239, 68, 68, 0.9)",
-          coreSymbol: "🎙",
-        };
-      case "TRANSCRIBING":
-        return {
-          primaryColor: isLight ? "#d97706" : "#f59e0b",
-          secondaryColor: "#b45309",
-          glowColor: "rgba(245, 158, 11, 0.75)",
-          label: "TRANSCRIBING // FASTER_WHISPER",
-          spinSpeedOuter: `${1.4 * hoverMultiplier}s`,
-          spinSpeedInner: `${0.9 * hoverMultiplier}s`,
-          pulseScale: 1.1,
-          plasmaGlow: "rgba(245, 158, 11, 0.8)",
-          coreSymbol: "⚡",
-        };
-      case "THINKING":
-        return {
-          primaryColor: isLight ? "#2563eb" : "#3b82f6",
-          secondaryColor: "#6366f1",
-          glowColor: "rgba(59, 130, 246, 0.8)",
-          label: "PROCESSING // NEURAL_OLLAMA",
-          spinSpeedOuter: `${1.8 * hoverMultiplier}s`,
-          spinSpeedInner: `${1.2 * hoverMultiplier}s`,
-          pulseScale: 1.06,
-          plasmaGlow: "rgba(59, 130, 246, 0.85)",
-          coreSymbol: "◈",
-        };
-      case "SPEAKING":
-        return {
-          primaryColor: isLight ? "#0284c7" : "#00f0ff",
-          secondaryColor: isLight ? "#0369a1" : "#38bdf8",
-          glowColor: isLight ? "rgba(2, 132, 199, 0.8)" : "rgba(0, 240, 255, 0.85)",
-          label: "SPEAKING // TTS_TRANSMIT",
-          spinSpeedOuter: `${2.2 * hoverMultiplier}s`,
-          spinSpeedInner: `${1.5 * hoverMultiplier}s`,
-          pulseScale: 1 + (audioEnergy > 0 ? audioEnergy * 0.35 : 0.12),
-          plasmaGlow: isLight ? "rgba(2, 132, 199, 0.9)" : "rgba(0, 240, 255, 0.95)",
-          coreSymbol: "🔊",
-        };
-      case "INTERRUPTED":
-        return {
-          primaryColor: "#f97316",
-          secondaryColor: "#ea580c",
-          glowColor: "rgba(249, 115, 22, 0.85)",
-          label: "BARGE_IN // INTERRUPT_TRIGGERED",
-          spinSpeedOuter: `${0.8 * hoverMultiplier}s`,
-          spinSpeedInner: `${0.6 * hoverMultiplier}s`,
-          pulseScale: 1.2,
-          plasmaGlow: "rgba(249, 115, 22, 0.9)",
-          coreSymbol: "⚡",
-        };
-      case "LISTENING":
-        return {
-          primaryColor: isLight ? "#0284c7" : "#06b6d4",
-          secondaryColor: isLight ? "#0369a1" : "#0891b2",
-          glowColor: isLight ? "rgba(2, 132, 199, 0.7)" : "rgba(6, 182, 212, 0.7)",
-          label: "LISTENING // SENSORS_ARMED",
-          spinSpeedOuter: `${6 * hoverMultiplier}s`,
-          spinSpeedInner: `${4.5 * hoverMultiplier}s`,
-          pulseScale: 1 + audioEnergy * 0.28,
-          plasmaGlow: isLight ? "rgba(2, 132, 199, 0.7)" : "rgba(6, 182, 212, 0.7)",
-          coreSymbol: "●",
-        };
-      case "ERROR":
-        return {
-          primaryColor: "#f87171",
-          secondaryColor: "#b91c1c",
-          glowColor: "rgba(248, 113, 113, 0.7)",
-          label: "SYSTEM_WARN // STANDBY",
-          spinSpeedOuter: `${8 * hoverMultiplier}s`,
-          spinSpeedInner: `${6 * hoverMultiplier}s`,
-          pulseScale: 1.0,
-          plasmaGlow: "rgba(248, 113, 113, 0.6)",
-          coreSymbol: "⚠",
-        };
-      case "IDLE":
-      default:
-        return {
-          primaryColor: isVoiceMode
-            ? (isLight ? "#0284c7" : "#00f0ff")
-            : (isLight ? "#0369a1" : "#0284c7"),
-          secondaryColor: isLight ? "#0284c7" : "#0369a1",
-          glowColor: isVoiceMode
-            ? (isLight ? "rgba(2, 132, 199, 0.6)" : "rgba(0, 240, 255, 0.6)")
-            : (isLight ? "rgba(2, 132, 199, 0.35)" : "rgba(2, 132, 199, 0.35)"),
-          label: isVoiceMode ? "VOICE_MODE // READY" : "AEGIS_CORE // STANDBY",
-          spinSpeedOuter: `${14 * hoverMultiplier}s`,
-          spinSpeedInner: `${10 * hoverMultiplier}s`,
-          pulseScale: isHovered ? 1.08 : 1.0,
-          plasmaGlow: isLight ? "rgba(2, 132, 199, 0.5)" : "rgba(0, 240, 255, 0.5)",
-          coreSymbol: "Æ",
-        };
-    }
-  }, [voiceState, audioEnergy, isVoiceMode, isHovered, isLight]);
+    const secondaryColor =
+      voiceState === "RECORDING"
+        ? "#f87171"
+        : voiceState === "THINKING"
+        ? "#f59e0b"
+        : "#ffffff";
 
-  // 36 Radial Equalizer Frequency Bars
-  const radialBars = useMemo(() => {
-    const bars = [];
-    const count = 36;
-    const baseRadius = size * 0.33;
+    const newParticles: Particle[] = [];
     for (let i = 0; i < count; i++) {
-      const angle = (i * 360) / count;
-      const rad = (angle * Math.PI) / 180;
-      const wave = Math.sin((i / count) * Math.PI * 4 + Date.now() / 200);
-      const isVoiceActive = voiceState === "RECORDING" || voiceState === "SPEAKING";
-      const energyMultiplier = isVoiceActive
-        ? Math.max(0.2, audioEnergy * (0.9 + wave * 0.4))
-        : 0.12 + Math.abs(wave) * 0.08;
-
-      const length = 4 + energyMultiplier * (size * 0.14);
-
-      const x1 = size / 2 + Math.cos(rad) * baseRadius;
-      const y1 = size / 2 + Math.sin(rad) * baseRadius;
-      const x2 = size / 2 + Math.cos(rad) * (baseRadius + length);
-      const y2 = size / 2 + Math.sin(rad) * (baseRadius + length);
-
-      bars.push({ x1, y1, x2, y2, angle, key: i });
+      const angle = Math.random() * Math.PI * 2;
+      const speed = (2.2 + Math.random() * 5.8) * intensity;
+      const life = 24 + Math.random() * 32;
+      newParticles.push({
+        x: 0,
+        y: 0,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        radius: 1.2 + Math.random() * 2.8,
+        alpha: 0.95,
+        color: Math.random() > 0.4 ? primaryColor : secondaryColor,
+        life: life,
+        maxLife: life,
+      });
     }
-    return bars;
-  }, [size, audioEnergy, voiceState]);
+    particlesRef.current.push(...newParticles);
 
-  // 8 Orbiting Quantum Particles
-  const orbitingParticles = useMemo(() => {
-    const count = 8;
-    const radius = size * 0.44;
-    const particles = [];
-    for (let i = 0; i < count; i++) {
-      const baseAngle = (i * 360) / count;
-      particles.push({ id: i, angle: baseAngle, radius });
-    }
-    return particles;
-  }, [size]);
+    // Expanding shockwaves
+    shockwavesRef.current.push(
+      {
+        radius: size * 0.16,
+        maxRadius: size * 0.48,
+        alpha: 0.85,
+        width: 3.2,
+        color: "#ffffff",
+        speed: 4.8 * intensity,
+      },
+      {
+        radius: size * 0.12,
+        maxRadius: size * 0.44,
+        alpha: 0.7,
+        width: 2.2,
+        color: primaryColor,
+        speed: 3.6 * intensity,
+      }
+    );
+  }, [voiceState, size]);
 
-  // 24 Neon Convergent Edge Filaments focusing inward toward centroid
-  const edgeFilaments = useMemo(() => {
-    const count = 24;
-    const outerR = size * 0.285;
-    const innerR = size * 0.238;
-    const filaments = [];
-    for (let i = 0; i < count; i++) {
-      const angle = (i * 360) / count;
-      const rad = (angle * Math.PI) / 180;
-      const x1 = size / 2 + Math.cos(rad) * outerR;
-      const y1 = size / 2 + Math.sin(rad) * outerR;
-      const x2 = size / 2 + Math.cos(rad) * innerR;
-      const y2 = size / 2 + Math.sin(rad) * innerR;
-      filaments.push({ id: i, x1, y1, x2, y2 });
+  // Trigger puff on command ingestion / voice state transitions
+  useEffect(() => {
+    if (prevVoiceStateRef.current !== voiceState) {
+      if (
+        voiceState === "THINKING" ||
+        voiceState === "SPEAKING" ||
+        voiceState === "RECORDING"
+      ) {
+        triggerPuffExplosion(1.15);
+      }
+      prevVoiceStateRef.current = voiceState;
     }
-    return filaments;
-  }, [size]);
+  }, [voiceState, triggerPuffExplosion]);
 
-  // 64 Precise Ticks for Inner Data Ring (24s period)
-  const innerRingTicks = useMemo(() => {
-    const ticks = [];
-    const count = 64;
-    const baseR = size * 0.325 + (isHovered ? 4 : 0);
-    for (let i = 0; i < count; i++) {
-      const isMajor = i % 8 === 0;
-      const tickLen = isMajor ? 6 : 3;
-      const angle = (i * 360) / count;
-      const rad = (angle * Math.PI) / 180;
-      const x1 = size / 2 + Math.cos(rad) * baseR;
-      const y1 = size / 2 + Math.sin(rad) * baseR;
-      const x2 = size / 2 + Math.cos(rad) * (baseR + tickLen);
-      const y2 = size / 2 + Math.sin(rad) * (baseR + tickLen);
-      ticks.push({ id: i, x1, y1, x2, y2, isMajor, angle });
-    }
-    return ticks;
-  }, [size, isHovered]);
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+    setMousePos({ x: Math.max(-1, Math.min(1, nx)), y: Math.max(-1, Math.min(1, ny)) });
+  };
 
-  // 3 Outer Chevron Framing Brackets (5s period)
-  const outerChevrons = useMemo(() => {
-    const chevrons = [];
-    const count = 3;
-    const r = size * 0.455 + (isHovered ? 10 : 0);
-    for (let i = 0; i < count; i++) {
-      const angle = i * 120;
-      chevrons.push({ id: i, angle, r });
-    }
-    return chevrons;
-  }, [size, isHovered]);
+  const handlePointerLeave = () => {
+    setIsHovered(false);
+    setMousePos({ x: 0, y: 0 });
+  };
+
+  const handleClick = () => {
+    triggerPuffExplosion(1.35);
+    onCoreClick?.();
+  };
+
+  // ─────────────────────────────────────────────────────────
+  // Master Canvas 60 FPS Render Loop
+  // ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) return;
+
+    let isRunning = true;
+
+    const render = () => {
+      if (!isRunning) return;
+      timeRef.current += 0.016;
+      const t = timeRef.current;
+
+      // Decay puff energy
+      puffEnergyRef.current *= 0.92;
+
+      // Smooth mouse parallax
+      mouseSmoothRef.current.x += (mousePos.x - mouseSmoothRef.current.x) * 0.08;
+      mouseSmoothRef.current.y += (mousePos.y - mouseSmoothRef.current.y) * 0.08;
+      const mx = mouseSmoothRef.current.x;
+      const my = mouseSmoothRef.current.y;
+
+      const dpr = window.devicePixelRatio || 1;
+      const w = size;
+      const h = size;
+
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+      }
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      const cx = w / 2;
+      const cy = h / 2;
+
+      // State-driven color definitions
+      let primaryColor = "#00f0ff";
+      let secondaryColor = "#8b5cf6";
+      let glowColor = "rgba(0, 240, 255, 0.45)";
+      let speedMult = 1.0;
+
+      if (voiceState === "RECORDING") {
+        primaryColor = "#ef4444";
+        secondaryColor = "#f87171";
+        glowColor = "rgba(239, 68, 68, 0.55)";
+        speedMult = 1.4;
+      } else if (voiceState === "TRANSCRIBING") {
+        primaryColor = "#f59e0b";
+        secondaryColor = "#fbbf24";
+        glowColor = "rgba(245, 158, 11, 0.55)";
+        speedMult = 1.8;
+      } else if (voiceState === "THINKING") {
+        primaryColor = "#8b5cf6";
+        secondaryColor = "#3b82f6";
+        glowColor = "rgba(139, 92, 246, 0.6)";
+        speedMult = 2.4;
+      } else if (voiceState === "SPEAKING") {
+        primaryColor = "#00f0ff";
+        secondaryColor = "#38bdf8";
+        glowColor = "rgba(0, 240, 255, 0.65)";
+        speedMult = 1.6;
+      } else if (voiceState === "ERROR") {
+        primaryColor = "#ef4444";
+        secondaryColor = "#991b1b";
+        glowColor = "rgba(239, 68, 68, 0.7)";
+        speedMult = 2.0;
+      }
+
+      // ── 1. Volumetric Deep Ambient Glow ──
+      const breath = Math.sin(t * 2.094) * 0.05 + 1.0; // 1.5s idle breath cycle
+      const audioBoost = (audioEnergy || 0) * 0.35;
+      const puffScale = 1.0 + puffEnergyRef.current * 0.16;
+      const dynamicScale = breath * (1 + audioBoost) * puffScale;
+
+      const outerGlowRadius = size * 0.44 * dynamicScale;
+      const bgGlow = ctx.createRadialGradient(cx, cy, size * 0.05, cx, cy, outerGlowRadius);
+      bgGlow.addColorStop(0, glowColor);
+      bgGlow.addColorStop(0.45, "rgba(0, 240, 255, 0.08)");
+      bgGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.fillStyle = bgGlow;
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerGlowRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // ── 2. Cinematic Iron Man Arc Reactor Mechanical Rings ──
+      const reactorRotation = t * 0.35 * speedMult;
+
+      // Outer Mechanical Segment Ring (12 Segments)
+      const rOuter = size * 0.40;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(reactorRotation);
+
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = primaryColor;
+      ctx.shadowColor = primaryColor;
+      ctx.shadowBlur = 10;
+
+      const segmentCount = 12;
+      const segAngle = (Math.PI * 2) / segmentCount;
+      for (let i = 0; i < segmentCount; i++) {
+        const startA = i * segAngle + 0.05;
+        const endA = (i + 1) * segAngle - 0.08;
+
+        ctx.beginPath();
+        ctx.arc(0, 0, rOuter, startA, endA);
+        ctx.stroke();
+
+        // Mechanical Arc End Notch
+        const nx = Math.cos(startA) * (rOuter - 6);
+        const ny = Math.sin(startA) * (rOuter - 6);
+        ctx.fillStyle = secondaryColor;
+        ctx.beginPath();
+        ctx.arc(nx, ny, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Outer Chevron Framing Brackets (3 brackets at 120 deg)
+      for (let i = 0; i < 3; i++) {
+        const angle = (i * Math.PI * 2) / 3;
+        const bx = Math.cos(angle) * (rOuter + 8);
+        const by = Math.sin(angle) * (rOuter + 8);
+
+        ctx.fillStyle = primaryColor;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(angle + 0.08) * 8, by + Math.sin(angle + 0.08) * 8);
+        ctx.lineTo(bx + Math.cos(angle - 0.08) * 8, by + Math.sin(angle - 0.08) * 8);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Middle Counter-Rotating Sensor Ring (24 Diagnostic Ticks)
+      const rMid = size * 0.33;
+      const midRotation = -t * 0.52 * speedMult;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(midRotation);
+
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.4)";
+      ctx.shadowBlur = 0;
+
+      const tickCount = 36;
+      for (let i = 0; i < tickCount; i++) {
+        const angle = (i * Math.PI * 2) / tickCount;
+        const isMajor = i % 9 === 0;
+        const tLen = isMajor ? 8 : 4;
+        const x1 = Math.cos(angle) * (rMid - tLen);
+        const y1 = Math.sin(angle) * (rMid - tLen);
+        const x2 = Math.cos(angle) * rMid;
+        const y2 = Math.sin(angle) * rMid;
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = isMajor ? primaryColor : "rgba(0, 240, 255, 0.35)";
+        ctx.stroke();
+      }
+
+      // 3 High-Energy Orbital Telemetry Nodes
+      for (let i = 0; i < 3; i++) {
+        const nodeAngle = (i * Math.PI * 2) / 3 + t * 0.8;
+        const nx = Math.cos(nodeAngle) * rMid;
+        const ny = Math.sin(nodeAngle) * rMid;
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(nx, ny, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+
+      // Inner High-Speed Conduit Ring
+      const rInner = size * 0.27;
+      const innerRotation = t * 0.85 * speedMult;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(innerRotation);
+
+      ctx.beginPath();
+      ctx.arc(0, 0, rInner, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.25)";
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+
+      // Degree Quadrant Markers
+      ctx.font = "9px 'DM Mono', monospace";
+      ctx.fillStyle = primaryColor;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const markers = ["000°", "090°", "180°", "270°"];
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 2;
+        const tx = Math.cos(a) * (rInner - 12);
+        const ty = Math.sin(a) * (rInner - 12);
+        ctx.fillText(markers[i], tx, ty);
+      }
+      ctx.restore();
+
+      // ── 3. True 3D Volumetric Crystalline Glass Orb (The Brain) ──
+      const orbRadius = size * 0.21 * dynamicScale;
+
+      // A. Back Refraction Volume (Dark glass substrate with metallic core depth)
+      const orbGrad = ctx.createRadialGradient(
+        cx + mx * 10,
+        cy + my * 10,
+        orbRadius * 0.15,
+        cx,
+        cy,
+        orbRadius
+      );
+      orbGrad.addColorStop(0, "rgba(10, 30, 60, 0.95)");
+      orbGrad.addColorStop(0.65, "rgba(5, 14, 30, 0.9)");
+      orbGrad.addColorStop(1, "rgba(0, 8, 20, 0.98)");
+
+      ctx.save();
+      ctx.fillStyle = orbGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, orbRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Glass Rim Fresnel Lighting
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = primaryColor;
+      ctx.shadowColor = primaryColor;
+      ctx.shadowBlur = 16;
+      ctx.stroke();
+      ctx.restore();
+
+      // B. Internal 3D Crystal Lattice Facets
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, orbRadius - 1.5, 0, Math.PI * 2);
+      ctx.clip(); // Constrain crystal facets and filaments inside the sphere
+
+      // Subtle crystal polygon lines catching dynamic refraction light
+      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.18)";
+      const facetCount = 8;
+      for (let i = 0; i < facetCount; i++) {
+        const a1 = (i * Math.PI * 2) / facetCount + t * 0.12;
+        const a2 = ((i + 3) * Math.PI * 2) / facetCount + t * 0.12;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a1) * (orbRadius * 0.85), cy + Math.sin(a1) * (orbRadius * 0.85));
+        ctx.lineTo(cx + Math.cos(a2) * (orbRadius * 0.45), cy + Math.sin(a2) * (orbRadius * 0.45));
+        ctx.stroke();
+      }
+
+      // C. Living Internal Plasma Filaments (Drifting toward Center)
+      const filamentCount = 28;
+      const energyExcitement = Math.max(0.1, audioEnergy * 3.2);
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+
+      for (let i = 0; i < filamentCount; i++) {
+        const baseAngle = (i * Math.PI * 2) / filamentCount;
+        const drift = t * (0.35 + (i % 3) * 0.15) * speedMult;
+        const angle = baseAngle + drift;
+
+        // Outer anchor on the glass rim
+        const xStart = cx + Math.cos(angle) * (orbRadius * 0.92);
+        const yStart = cy + Math.sin(angle) * (orbRadius * 0.92);
+
+        // Sinusoidal undulating control point with sound reactivity
+        const wave = Math.sin(t * 3.5 + i * 1.2) * (14 + energyExcitement * 24);
+        const midR = orbRadius * (0.45 + (i % 4) * 0.08);
+        const xCtrl = cx + Math.cos(angle + 0.35) * midR + Math.cos(drift * 2) * wave;
+        const yCtrl = cy + Math.sin(angle + 0.35) * midR + Math.sin(drift * 2) * wave;
+
+        // Center singularity destination
+        const endR = orbRadius * 0.06;
+        const xEnd = cx + Math.cos(angle * 2) * endR;
+        const yEnd = cy + Math.sin(angle * 2) * endR;
+
+        // Draw living glowing filament curve
+        ctx.beginPath();
+        ctx.moveTo(xStart, yStart);
+        ctx.quadraticCurveTo(xCtrl, yCtrl, xEnd, yEnd);
+
+        ctx.strokeStyle = i % 2 === 0 ? primaryColor : secondaryColor;
+        ctx.lineWidth = 1.0 + (energyExcitement * 1.5);
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 8;
+        ctx.stroke();
+
+        // Tip energy bead
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(xCtrl, yCtrl, 1.2 + energyExcitement * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // D. Central Energy Singularity (Luminous Core Nucleus)
+      const nucleusRadius = orbRadius * 0.22 * (1 + (audioEnergy || 0) * 0.6);
+      const nucleusGrad = ctx.createRadialGradient(
+        cx,
+        cy,
+        nucleusRadius * 0.1,
+        cx,
+        cy,
+        nucleusRadius
+      );
+      nucleusGrad.addColorStop(0, "#ffffff");
+      nucleusGrad.addColorStop(0.35, primaryColor);
+      nucleusGrad.addColorStop(0.8, secondaryColor);
+      nucleusGrad.addColorStop(1, "rgba(0,0,0,0)");
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = nucleusGrad;
+      ctx.shadowColor = primaryColor;
+      ctx.shadowBlur = 24;
+      ctx.beginPath();
+      ctx.arc(cx, cy, nucleusRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Core Geometric Symbol (High-Tech Monogram)
+      ctx.font = `900 ${Math.round(size * 0.07)}px 'Orbitron', monospace`;
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "#ffffff";
+      ctx.shadowBlur = 12;
+      ctx.fillText("Æ", cx, cy + 2);
+      ctx.restore();
+
+      // E. Front Specular Glare & 3D Glass Highlight (Follows Parallax Cursor)
+      const specX = cx - orbRadius * 0.35 + mx * 18;
+      const specY = cy - orbRadius * 0.35 + my * 18;
+      const specRadius = orbRadius * 0.45;
+
+      const specGrad = ctx.createRadialGradient(
+        specX,
+        specY,
+        specRadius * 0.05,
+        specX,
+        specY,
+        specRadius
+      );
+      specGrad.addColorStop(0, "rgba(255, 255, 255, 0.75)");
+      specGrad.addColorStop(0.4, "rgba(0, 240, 255, 0.25)");
+      specGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+      ctx.save();
+      ctx.fillStyle = specGrad;
+      ctx.beginPath();
+      ctx.ellipse(specX, specY, specRadius, specRadius * 0.6, -Math.PI / 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.restore(); // End orb clipping
+
+      // ── 4. Expanding Shockwaves & Radiant Particle Physics ──
+      // Update and draw shockwaves
+      for (let i = shockwavesRef.current.length - 1; i >= 0; i--) {
+        const sw = shockwavesRef.current[i];
+        sw.radius += sw.speed;
+        sw.alpha *= 0.94;
+
+        if (sw.radius >= sw.maxRadius || sw.alpha <= 0.02) {
+          shockwavesRef.current.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = sw.color;
+        ctx.lineWidth = sw.width * (sw.alpha / 0.85);
+        ctx.globalAlpha = sw.alpha;
+        ctx.shadowColor = sw.color;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(cx, cy, sw.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Update and draw spark particles
+      for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+        const p = particlesRef.current[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.96;
+        p.vy *= 0.96;
+        p.life -= 1;
+        p.alpha = Math.max(0, p.life / p.maxLife);
+
+        if (p.life <= 0 || p.alpha <= 0.01) {
+          particlesRef.current.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.alpha;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(cx + p.x, cy + p.y, p.radius * p.alpha, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      ctx.restore();
+      animFrameRef.current = requestAnimationFrame(render);
+    };
+
+    animFrameRef.current = requestAnimationFrame(render);
+
+    return () => {
+      isRunning = false;
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [size, voiceState, audioEnergy, mousePos, triggerPuffExplosion]);
 
   return (
     <div
+      ref={containerRef}
+      onPointerMove={handlePointerMove}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={handlePointerLeave}
       onClick={handleClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={{
         position: "relative",
         width: `${size}px`,
@@ -262,401 +595,97 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        cursor: onCoreClick ? "pointer" : "default",
+        cursor: "pointer",
         userSelect: "none",
-        transform: isHovered ? "scale(1.02)" : "scale(1)",
-        transition: "transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        touchAction: "none",
       }}
-      title={onCoreClick ? "Click to toggle Voice Interaction" : undefined}
     >
-      {/* Background Holographic Atmosphere Glow */}
-      <div
+      <canvas
+        ref={canvasRef}
         style={{
-          position: "absolute",
-          width: `${size * 0.85}px`,
-          height: `${size * 0.85}px`,
-          borderRadius: "50%",
-          background: `radial-gradient(circle, ${stateConfig.glowColor} 0%, rgba(0,0,0,0) 70%)`,
-          filter: "blur(28px)",
-          opacity: isHovered ? 0.95 : 0.75,
-          transition: "background 0.3s ease, opacity 0.3s ease",
-          pointerEvents: "none",
+          width: `${size}px`,
+          height: `${size}px`,
+          display: "block",
+          filter: isHovered ? "drop-shadow(0 0 32px var(--cyan-glow))" : "none",
+          transition: "filter 0.3s ease",
         }}
       />
 
-      {/* SVG Arc Reactor Canvas */}
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        style={{
-          position: "absolute",
-          inset: 0,
-          overflow: "visible",
-        }}
-      >
-        <defs>
-          <linearGradient id="aegisPlasmaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={stateConfig.primaryColor} stopOpacity="0.95" />
-            <stop offset="60%" stopColor={stateConfig.secondaryColor} stopOpacity="0.8" />
-            <stop offset="100%" stopColor={isLight ? "#f0f4f9" : "#020813"} stopOpacity="0.95" />
-          </linearGradient>
-
-          {/* Crystalline Glass & Refraction Gradient */}
-          <radialGradient id="aegisCrystalGrad" cx="35%" cy="30%" r="70%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.65" />
-            <stop offset="25%" stopColor={stateConfig.primaryColor} stopOpacity="0.45" />
-            <stop offset="70%" stopColor={stateConfig.secondaryColor} stopOpacity="0.8" />
-            <stop offset="100%" stopColor={isLight ? "#e2e8f0" : "#020813"} stopOpacity="0.95" />
-          </radialGradient>
-
-          {/* Specular Glare Highlight */}
-          <linearGradient id="aegisGlassSpecular" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.0" />
-          </linearGradient>
-
-          <filter id="aegisGlow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {/* Click Shockwave Ripples */}
-        {ripples.map((ripple) => (
-          <circle
-            key={ripple.id}
-            cx={size / 2}
-            cy={size / 2}
-            fill="none"
-            stroke={stateConfig.primaryColor}
-            filter="url(#aegisGlow)"
-            style={{
-              animation: "coreShockwave 0.75s ease-out forwards",
-            }}
-          />
-        ))}
-
-        {/* =========================================================
-            THREE HOLOGRAPHIC CONCENTRIC DATA RINGS
-            ========================================================= */}
-
-        {/* 1. OUTER RING (Fast 5.0s Clockwise) — Critical Alerts & Chevron Framing */}
-        <g
-          style={{
-            transformOrigin: "center center",
-            animation: `spinClockwise ${stateConfig.spinSpeedOuter} linear infinite`,
-          }}
-        >
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={size * 0.455 + (isHovered ? 10 : 0)}
-            fill="none"
-            stroke={stateConfig.primaryColor}
-            strokeWidth="1.6"
-            strokeDasharray={`${size * 0.22} ${size * 0.08} ${size * 0.04} ${size * 0.08}`}
-            strokeOpacity={isLight ? 0.85 : 0.75}
-            filter="url(#aegisGlow)"
-          />
-
-          {/* Triple Chevron Framing Brackets with glowing pointer arrows */}
-          {outerChevrons.map((c) => {
-            const rad = (c.angle * Math.PI) / 180;
-            const cx = size / 2 + Math.cos(rad) * c.r;
-            const cy = size / 2 + Math.sin(rad) * c.r;
-            return (
-              <g key={c.id} transform={`rotate(${c.angle} ${cx} ${cy})`}>
-                <polygon
-                  points={`${cx - 5},${cy - 4} ${cx + 5},${cy} ${cx - 5},${cy + 4}`}
-                  fill={stateConfig.primaryColor}
-                  filter="url(#aegisGlow)"
-                />
-              </g>
-            );
-          })}
-        </g>
-
-        {/* 2. MIDDLE RING (Medium 12.0s Counter-Clockwise) — Environmental Telemetry */}
-        <g
-          style={{
-            transformOrigin: "center center",
-            animation: `spinCounterClockwise ${stateConfig.spinSpeedInner} linear infinite`,
-          }}
-        >
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={size * 0.39 + (isHovered ? 6 : 0)}
-            fill="none"
-            stroke={stateConfig.secondaryColor}
-            strokeWidth="1.4"
-            strokeDasharray="8 16 32 8"
-            strokeOpacity={isLight ? 0.75 : 0.65}
-          />
-
-          {/* 4 Orbital Sensor Crosshairs */}
-          {[45, 135, 225, 315].map((deg) => {
-            const rad = (deg * Math.PI) / 180;
-            const rMid = size * 0.39 + (isHovered ? 6 : 0);
-            const x1 = size / 2 + Math.cos(rad) * (rMid - 4);
-            const y1 = size / 2 + Math.sin(rad) * (rMid - 4);
-            const x2 = size / 2 + Math.cos(rad) * (rMid + 4);
-            const y2 = size / 2 + Math.sin(rad) * (rMid + 4);
-            return (
-              <line
-                key={deg}
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
-                stroke={stateConfig.primaryColor}
-                strokeWidth="1.8"
-                strokeOpacity="0.85"
-              />
-            );
-          })}
-        </g>
-
-        {/* 3. INNER RING (Slow 24.0s Clockwise) — 64 Ticks & Kernel Diagnostics */}
-        <g
-          style={{
-            transformOrigin: "center center",
-            animation: `spinClockwise ${stateConfig.spinSpeedOuter === "2.8s" ? "4s" : "24s"} linear infinite`,
-          }}
-        >
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={size * 0.325 + (isHovered ? 4 : 0)}
-            fill="none"
-            stroke={stateConfig.primaryColor}
-            strokeWidth="0.8"
-            strokeOpacity={isLight ? 0.4 : 0.3}
-          />
-
-          {/* 64 System Diagnostic Ticks */}
-          {innerRingTicks.map((t) => (
-            <line
-              key={t.id}
-              x1={t.x1}
-              y1={t.y1}
-              x2={t.x2}
-              y2={t.y2}
-              stroke={stateConfig.primaryColor}
-              strokeWidth={t.isMajor ? "1.6" : "0.9"}
-              strokeOpacity={t.isMajor ? 0.85 : 0.45}
-            />
-          ))}
-
-          {/* 4 Quadrant Degree Telemetry Notches */}
-          {[0, 90, 180, 270].map((deg) => {
-            const rad = (deg * Math.PI) / 180;
-            const rDeg = size * 0.35 + (isHovered ? 4 : 0);
-            const x = size / 2 + Math.cos(rad) * rDeg;
-            const y = size / 2 + Math.sin(rad) * rDeg;
-            return (
-              <text
-                key={deg}
-                x={x}
-                y={y + 3}
-                textAnchor="middle"
-                fill={stateConfig.primaryColor}
-                fontSize="6.5"
-                fontFamily="'DM Mono', monospace"
-                opacity="0.75"
-              >
-                {deg.toString().padStart(2, "0")}°
-              </text>
-            );
-          })}
-        </g>
-
-        {/* 3. 36-Bar Sound-Reactive Equalizer Ring */}
-        <g>
-          {radialBars.map((bar) => (
-            <line
-              key={bar.key}
-              x1={bar.x1}
-              y1={bar.y1}
-              x2={bar.x2}
-              y2={bar.y2}
-              stroke={stateConfig.primaryColor}
-              strokeWidth="1.6"
-              strokeOpacity="0.9"
-              strokeLinecap="round"
-              filter="url(#aegisGlow)"
-              style={{ transition: "all 0.04s ease" }}
-            />
-          ))}
-        </g>
-
-        {/* 4. Orbiting Quantum Nodes */}
-        <g
-          style={{
-            transformOrigin: "center center",
-            animation: `spinClockwise ${stateConfig.spinSpeedOuter} linear infinite`,
-          }}
-        >
-          {orbitingParticles.map((p) => {
-            const rad = (p.angle * Math.PI) / 180;
-            const x = size / 2 + Math.cos(rad) * p.radius;
-            const y = size / 2 + Math.sin(rad) * p.radius;
-            return (
-              <circle
-                key={p.id}
-                cx={x}
-                cy={y}
-                r={2 + (audioEnergy > 0 ? audioEnergy * 2.5 : 0)}
-                fill={stateConfig.primaryColor}
-                filter="url(#aegisGlow)"
-                style={{ transition: "r 0.05s ease" }}
-              />
-            );
-          })}
-        </g>
-
-        {/* 5. 24 Neon Convergent Edge Filaments */}
-        <g>
-          {edgeFilaments.map((f) => (
-            <line
-              key={f.id}
-              x1={f.x1}
-              y1={f.y1}
-              x2={f.x2}
-              y2={f.y2}
-              stroke={stateConfig.primaryColor}
-              strokeWidth="1.2"
-              strokeOpacity="0.75"
-              strokeDasharray="4 2"
-              style={{
-                animation: "filamentConverge 2s ease-in-out infinite",
-                animationDelay: `${(f.id % 4) * 0.25}s`,
-              }}
-            />
-          ))}
-        </g>
-
-        {/* Puff Expansion Shockwave Rings */}
-        {isPuffing && (
-          <>
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={size * 0.24}
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="2.5"
-              style={{ animation: "radialShockwave 0.35s ease-out forwards" }}
-            />
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={size * 0.24}
-              fill="none"
-              stroke={stateConfig.primaryColor}
-              strokeWidth="1.8"
-              style={{ animation: "radialShockwave 0.45s ease-out 0.08s forwards" }}
-            />
-          </>
-        )}
-
-        {/* 6. Central Crystalline Glass Orb (The Brain of AEGIS) */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={size * 0.235 * stateConfig.pulseScale * (isPuffing ? 1.16 : 1)}
-          fill="url(#aegisCrystalGrad)"
-          stroke={stateConfig.primaryColor}
-          strokeWidth="2.4"
-          filter="url(#aegisGlow)"
-          style={{
-            transformOrigin: "center center",
-            transition: "r 0.1s cubic-bezier(0.16, 1, 0.3, 1), fill 0.3s ease, stroke 0.3s ease",
-          }}
-        />
-
-        {/* Specular Crystal Glass Highlight */}
-        <ellipse
-          cx={size / 2 - size * 0.05}
-          cy={size / 2 - size * 0.06}
-          rx={size * 0.11}
-          ry={size * 0.065}
-          fill="url(#aegisGlassSpecular)"
-          opacity="0.65"
-          style={{ pointerEvents: "none" }}
-        />
-
-        {/* Inner Hexagonal Cell */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={size * 0.135}
-          fill="none"
-          stroke="#ffffff"
-          strokeWidth="1.2"
-          strokeOpacity="0.8"
-          strokeDasharray="6 3"
-        />
-
-        {/* Center Aegis Monogram */}
-        <text
-          x={size / 2}
-          y={size / 2 + 5}
-          textAnchor="middle"
-          fill="#ffffff"
-          fontSize={size * 0.12}
-          fontFamily="'Orbitron', monospace"
-          fontWeight="900"
-          letterSpacing="1px"
-          style={{
-            pointerEvents: "none",
-            textShadow: `0 0 14px ${stateConfig.plasmaGlow}`,
-          }}
-        >
-          Æ
-        </text>
-      </svg>
-
-      {/* Under-Core Holographic State Banner */}
+      {/* Under-Core Holographic State Status Banner */}
       <div
         style={{
           position: "absolute",
-          bottom: "-34px",
+          bottom: "-32px",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "2px",
+          gap: "3px",
           pointerEvents: "none",
         }}
       >
-        <span
-          style={{
-            fontFamily: "'Orbitron', monospace",
-            fontSize: "10.5px",
-            fontWeight: 700,
-            letterSpacing: "1.5px",
-            color: stateConfig.primaryColor,
-            textShadow: `0 0 8px ${stateConfig.glowColor}`,
-            textTransform: "uppercase",
-            transition: "color 0.3s ease",
-          }}
-        >
-          {stateConfig.label}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span
+            style={{
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              backgroundColor:
+                voiceState === "RECORDING"
+                  ? "#ef4444"
+                  : voiceState === "THINKING"
+                  ? "#8b5cf6"
+                  : "#00f0ff",
+              boxShadow: `0 0 8px ${
+                voiceState === "RECORDING"
+                  ? "#ef4444"
+                  : voiceState === "THINKING"
+                  ? "#8b5cf6"
+                  : "#00f0ff"
+              }`,
+            }}
+          />
+          <span
+            style={{
+              fontFamily: "'Orbitron', monospace",
+              fontSize: "10.5px",
+              fontWeight: 700,
+              letterSpacing: "1.5px",
+              color:
+                voiceState === "RECORDING"
+                  ? "#ef4444"
+                  : voiceState === "THINKING"
+                  ? "#8b5cf6"
+                  : isLight
+                  ? "#0284c7"
+                  : "#00f0ff",
+              textShadow: "0 0 10px rgba(0, 240, 255, 0.4)",
+              textTransform: "uppercase",
+            }}
+          >
+            {voiceState === "RECORDING"
+              ? "RECORDING // AUDIO_LOCKED"
+              : voiceState === "TRANSCRIBING"
+              ? "TRANSCRIBING // FASTER_WHISPER"
+              : voiceState === "THINKING"
+              ? "PROCESSING // NEURAL_OLLAMA"
+              : voiceState === "SPEAKING"
+              ? "TRANSMITTING // SYNTHESIS"
+              : isVoiceMode
+              ? "ONLINE // VOICE_STANDBY"
+              : "AEGIS PROTOCOL // READY"}
+          </span>
+        </div>
+
         <span
           style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: "11px",
             fontWeight: 600,
             letterSpacing: "1px",
-            color: isLight ? "#64748b" : "rgba(226, 232, 240, 0.6)",
+            color: isLight ? "#64748b" : "rgba(226, 232, 240, 0.55)",
           }}
         >
-          [ AEGIS PROTOCOL // CLICK CORE TO INTERACT ]
+          [ CLICK CORE TO TRIGGER ENERGY PULSE // SPACE / ESC ]
         </span>
       </div>
     </div>
