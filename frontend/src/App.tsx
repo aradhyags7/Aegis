@@ -33,6 +33,7 @@ import {
 } from "./voiceController";
 
 import { AegisHudView } from "./components/AegisHudView";
+import { AegisChatConsole } from "./components/AegisChatConsole";
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -1422,203 +1423,27 @@ export default function App() {
               onSwitchToTerminal={() => setViewMode("TERMINAL")}
             />
           ) : (
-            /* ── Tactical Command Terminal Mode ────────────── */
-            <div
-              style={{
-                width: "100%",
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-              }}
-            >
-              <div className="hud-grid-background" />
-
-              {/* Chat Message Stream */}
-              <div
-                ref={scrollRef}
-                onScroll={onScroll}
-                style={{
-                  flex: 1,
-                  overflowY: "auto",
-                  padding: "24px 32px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "16px",
-                  zIndex: 2,
-                }}
-              >
-                {isEmpty && (
-                  <div
-                    style={{
-                      flex: 1,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "16px",
-                      marginTop: "80px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: "64px",
-                        height: "64px",
-                        borderRadius: "16px",
-                        background: "linear-gradient(135deg, var(--cyan-dim), var(--cyan-glow))",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "26px",
-                        fontWeight: 800,
-                        color: "#fff",
-                        fontFamily: "'Orbitron', monospace",
-                        boxShadow: "0 0 32px var(--shadow-glow)",
-                      }}
-                    >
-                      Æ
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontFamily: "'Orbitron', monospace", fontSize: "18px", fontWeight: 700, color: "var(--text-main)", letterSpacing: "1px" }}>
-                        AEGIS COMMAND TERMINAL
-                      </div>
-                      <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
-                        Adaptive Engine for General Intelligence & Systems · {activeModel}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {chat.map((msg, idx) => (
-                  <MessageBubble
-                    key={msg.id}
-                    msg={msg}
-                    onCopy={copyMsg}
-                    onRegenerate={regenerate}
-                    onSpeak={msg.sender === "ai" ? () => handleBubbleSpeak(msg.text) : undefined}
-                    isSpeaking={isSpeaking}
-                    isLast={idx === chat.length - 1}
-                  />
-                ))}
-
-                {loading && !streaming && (
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
-                    <div
-                      style={{
-                        width: "30px",
-                        height: "30px",
-                        borderRadius: "8px",
-                        background: "linear-gradient(135deg, var(--cyan-dim), var(--cyan-glow))",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "12px",
-                        fontWeight: "800",
-                        color: "#fff",
-                        fontFamily: "'Orbitron', monospace",
-                      }}
-                    >
-                      Æ
-                    </div>
-                    <div className="hud-corner-box" style={{ padding: "10px 16px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "10px" }}>
-                      <TypingDots />
-                      {actionStatus && (
-                        <span style={{ fontSize: "12.5px", color: "var(--amber-warn)", fontFamily: "'DM Mono', monospace" }}>
-                          ⚡ {actionStatus}
-                        </span>
-                      )}
-                      {searchStatus && (
-                        <span style={{ fontSize: "12.5px", color: "var(--text-cyan)", fontFamily: "'DM Mono', monospace" }}>
-                          🌐 {searchStatus}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div ref={chatEndRef} />
-              </div>
-
-              {/* Input Action Bar */}
-              <div
-                style={{
-                  padding: "14px 28px 20px",
-                  borderTop: "1px solid var(--cyan-border)",
-                  background: "var(--bg-header)",
-                  backdropFilter: "blur(14px)",
-                  WebkitBackdropFilter: "blur(14px)",
-                  zIndex: 3,
-                }}
-              >
-                <div
-                  className="hud-corner-box"
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-end",
-                    gap: "10px",
-                    padding: "10px 14px",
-                    border: `1px solid ${voiceState === "RECORDING" ? "var(--red-hazard)" : voiceMode ? "var(--cyan-glow)" : "var(--cyan-border)"}`,
-                    boxShadow: voiceMode ? "0 0 16px var(--shadow-glow)" : "none",
-                  }}
-                >
-                  <textarea
-                    ref={inputRef}
-                    value={message}
-                    onChange={e => { setMessage(e.target.value); resizeTextarea(e.target); }}
-                    onKeyDown={handleKeyDown}
-                    placeholder={
-                      voiceState === "RECORDING"
-                        ? `Live Speech: ${liveTranscript || "Listening…"}`
-                        : voiceMode
-                        ? "Voice Mode active · speak freely or enter message…"
-                        : "Enter message…  (⏎ send · ⇧⏎ newline · ⎋ abort · Tab HUD)"
-                    }
-                    rows={1}
-                    style={{
-                      flex: 1,
-                      background: "transparent",
-                      color: "var(--text-main)",
-                      border: "none",
-                      fontSize: "14px",
-                      lineHeight: "1.55",
-                      maxHeight: "160px",
-                      overflowY: "auto",
-                      fontFamily: "'Outfit', sans-serif",
-                    }}
-                  />
-
-                  {isActive || isSpeaking ? (
-                    <button onClick={abort} className="hud-btn hud-btn-danger" style={{ padding: "6px 12px" }}>
-                      ■ STOP
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        className={`hud-btn ${voiceState === "RECORDING" ? "hud-btn-danger" : ""}`}
-                        onClick={voiceMode ? toggleVoiceMode : toggleManualRecording}
-                        style={{ padding: "6px 12px" }}
-                        title={voiceMode ? "Voice Mode Active" : "Push to talk"}
-                      >
-                        {voiceState === "RECORDING" ? "● RECORDING" : "🎤 VOICE"}
-                      </button>
-                      <button
-                        onClick={() => sendMessage()}
-                        disabled={!message.trim()}
-                        className="hud-btn"
-                        style={{ padding: "6px 12px" }}
-                      >
-                        SEND ↵
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px", fontSize: "10px", color: "var(--text-muted)", fontFamily: "'DM Mono', monospace" }}>
-                  <span>AEGIS PROTOCOL // REAL-TIME TIME-AWARE SEARCH ARMED</span>
-                  <span>{message.length > 0 ? `${message.length} CHARS` : "READY"}</span>
-                </div>
-              </div>
-            </div>
+            <AegisChatConsole
+              chat={chat}
+              loading={loading}
+              streaming={streaming}
+              searchStatus={searchStatus}
+              actionStatus={actionStatus}
+              activeModel={activeModel}
+              voiceState={voiceState}
+              audioEnergy={audioEnergy}
+              isVoiceMode={voiceMode}
+              theme={theme}
+              speechRate={speechRate}
+              isSpeaking={isSpeaking}
+              onSendMessage={sendMessage}
+              onAbort={abort}
+              onToggleVoiceMode={toggleVoiceMode}
+              onSwitchToHud={() => setViewMode("HUD")}
+              onSpeakText={handleBubbleSpeak}
+              onRegenerate={regenerate}
+              onClearHistory={() => setShowClearConfirm(true)}
+            />
           )}
         </main>
       </div>
