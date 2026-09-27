@@ -3,6 +3,7 @@ Aegis — FastAPI Application Entry Point
 """
 
 import time
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -57,6 +58,9 @@ async def lifespan(app: FastAPI):
         log.info("✓ Ollama reachable  |  models: %s", models or "(none pulled)")
         if not any(MODEL in m for m in (models or [])):
             log.warning("Model '%s' not found locally → run: ollama pull %s", MODEL, MODEL)
+        else:
+            # Pre-warm model in VRAM in background so first user request is instant
+            asyncio.create_task(ollama.warmup(MODEL))
     else:
         log.warning("✗ Ollama unreachable — requests will fail until it's running")
 

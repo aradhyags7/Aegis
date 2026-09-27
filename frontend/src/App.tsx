@@ -530,6 +530,21 @@ export default function App() {
   const vadRef              = useRef<VADEngine>(new VADEngine());
   const recognitionRef      = useRef<any>(null);
 
+  // Speech Rate State (Default 1.7x Very Fast)
+  const [speechRate, setSpeechRate] = useState<number>(() => ttsRef.current.getRate());
+
+  const cycleSpeechRate = useCallback(() => {
+    setSpeechRate(prev => {
+      let next = 1.7;
+      if (prev < 1.35) next = 1.5;
+      else if (prev < 1.6) next = 1.75;
+      else if (prev < 1.85) next = 2.0;
+      else next = 1.2;
+      ttsRef.current.setRate(next);
+      return next;
+    });
+  }, []);
+
   const chatEndRef        = useRef<HTMLDivElement>(null);
   const inputRef          = useRef<HTMLTextAreaElement>(null);
   const esRef             = useRef<EventSource | null>(null);
@@ -693,6 +708,18 @@ export default function App() {
     const userMessage = (text ?? message).trim();
     if (!userMessage || loading || streaming) return;
 
+    // Voice Speed Command Recognition
+    const lower = userMessage.toLowerCase();
+    if (lower.includes("speak faster") || lower.includes("talk faster") || lower.includes("speed up") || lower.includes("faster voice") || lower.includes("make very fast") || lower.includes("speak very fast")) {
+      const nextRate = 1.85;
+      ttsRef.current.setRate(nextRate);
+      setSpeechRate(nextRate);
+    } else if (lower.includes("speak slower") || lower.includes("talk slower") || lower.includes("slow down")) {
+      const nextRate = 1.25;
+      ttsRef.current.setRate(nextRate);
+      setSpeechRate(nextRate);
+    }
+
     const userMsg: Message = {
       id: uuid(),
       sender: "user",
@@ -748,6 +775,7 @@ export default function App() {
         }
         return;
       }
+
       try {
         const parsed = JSON.parse(event.data);
         if (parsed.error) {
@@ -799,16 +827,23 @@ export default function App() {
             setChat(prev => prev.map(m => m.id === aiId ? { ...m, text: buffer } : m));
           }
 
-          // Near-Instant Streaming Sentence TTS
+          // Ultra-Low Latency Streaming Sentence & Micro-Clause TTS
           const shouldSpeak = fromVoice || voiceModeRef.current;
           if (shouldSpeak) {
             const unhandled = buffer.slice(spokenUpToIndex);
-            const sentenceMatch = unhandled.match(/^(.*?[.!?\n])(?:\s+|$)/);
-            if (sentenceMatch && sentenceMatch[1].trim().length > 1) {
-              const sentenceToSpeak = sentenceMatch[1].trim();
-              spokenUpToIndex += sentenceMatch[0].length;
+            // 1. Natural sentence terminator (. ! ? or newline)
+            // 2. Natural clause break (, ; : —) if preceded by at least 10 chars
+            // 3. Safety break: if unhandled text exceeds 40 chars, break at nearest word boundary
+            const chunkMatch =
+              unhandled.match(/^([\s\S]*?[.!?\n])(?:\s+|$)/) ||
+              unhandled.match(/^([\s\S]{10,}?[,;:—])(?:\s+|$)/) ||
+              unhandled.match(/^([\s\S]{36,52}\s)/);
+
+            if (chunkMatch && chunkMatch[1].trim().length > 1) {
+              const chunkToSpeak = chunkMatch[1].trim();
+              spokenUpToIndex += chunkMatch[0].length;
               updateVoiceState("SPEAKING");
-              ttsRef.current.enqueueSentence(sentenceToSpeak);
+              ttsRef.current.enqueueSentence(chunkToSpeak);
             }
           }
         }
@@ -1310,6 +1345,25 @@ export default function App() {
               title="Toggle Hands-Free Voice Conversation Mode (Ctrl+M)"
             >
               <span>{voiceMode ? "● VOICE ACTIVE" : "🎙 VOICE MODE"}</span>
+            </button>
+
+            {/* Speech Rate Control */}
+            <button
+              onClick={cycleSpeechRate}
+              className="hud-btn"
+              style={{
+                padding: "5px 11px",
+                fontSize: "11px",
+                fontFamily: "'Orbitron', monospace",
+                letterSpacing: "0.5px",
+                borderColor: speechRate >= 1.6 ? "var(--cyan-glow)" : "var(--cyan-border)",
+                color: speechRate >= 1.6 ? "var(--cyan-glow)" : "var(--text-cyan)",
+                boxShadow: speechRate >= 1.6 ? "0 0 10px rgba(0,240,255,0.25)" : "none",
+                transition: "all 0.2s ease",
+              }}
+              title="Click to adjust Speech Speed: 1.2x (Normal) -> 1.5x (Fast) -> 1.75x (Very Fast) -> 2.0x (Warp Speed)"
+            >
+              <span>⚡ {speechRate.toFixed(2)}x {speechRate >= 1.9 ? "WARP" : speechRate >= 1.6 ? "VERY FAST" : speechRate >= 1.4 ? "FAST" : "NORM"}</span>
             </button>
 
             {/* Model Select */}

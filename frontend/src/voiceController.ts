@@ -127,8 +127,12 @@ export class TTSController {
   private _streamComplete = false;
   private _onEndCallback: (() => void) | null = null;
   private _currentUtterance: SpeechSynthesisUtterance | null = null;
-  private _rate = 1.3; // Fast, energetic, crisp conversational pace (1.3x)
+  private _rate = parseFloat(
+    (typeof localStorage !== "undefined" && localStorage.getItem("aegis_tts_rate")) || "1.65"
+  ); // Very fast, crisp conversational pace (1.65x default)
   private _voice: SpeechSynthesisVoice | null = null;
+  private _activeUtterances: Set<SpeechSynthesisUtterance> = new Set(); // Chromium GC bug guard
+  private _watchdogId: any = null;
 
   constructor() {
     this._initVoice();
@@ -144,7 +148,7 @@ export class TTSController {
     const voices = window.speechSynthesis.getVoices();
     if (!voices || voices.length === 0) return;
 
-    // Prioritize natural, clear English voices
+    // Prioritize natural, fast, clear English voices
     const preferred = voices.find(v => 
       v.lang.startsWith("en") && (
         v.name.includes("David") ||
@@ -159,7 +163,10 @@ export class TTSController {
   }
 
   public setRate(rate: number) {
-    this._rate = Math.max(0.5, Math.min(2.5, rate));
+    this._rate = Math.max(0.8, Math.min(2.5, rate));
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("aegis_tts_rate", this._rate.toFixed(2));
+    }
   }
 
   public getRate(): number {
@@ -181,7 +188,7 @@ export class TTSController {
   }
 
   /**
-   * Enqueues a single completed sentence for immediate streaming playback.
+   * Enqueues a single clause or sentence for instant streaming playback.
    */
   public enqueueSentence(rawSentence: string) {
     if (!("speechSynthesis" in window)) return;
@@ -209,10 +216,31 @@ export class TTSController {
     }
   }
 
+  private _startWatchdog() {
+    this._clearWatchdog();
+    // In Chromium/Electron, speechSynthesis occasionally stalls without firing onstart.
+    // Watchdog unfreezes it automatically via resume()
+    this._watchdogId = setTimeout(() => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        if (window.speechSynthesis.paused || this._speaking) {
+          window.speechSynthesis.resume();
+        }
+      }
+    }, 280);
+  }
+
+  private _clearWatchdog() {
+    if (this._watchdogId) {
+      clearTimeout(this._watchdogId);
+      this._watchdogId = null;
+    }
+  }
+
   private _playNext() {
     if (this._queue.length === 0) {
       this._speaking = false;
       this._currentUtterance = null;
+      this._clearWatchdog();
       if (this._streamComplete) {
         const cb = this._onEndCallback;
         this._onEndCallback = null;
@@ -239,26 +267,38 @@ export class TTSController {
     }
 
     this._currentUtterance = utterance;
+    this._activeUtterances.add(utterance); // Prevent GC from reaping utterance mid-flight
 
     utterance.onstart = () => {
       this._speaking = true;
+      this._clearWatchdog();
     };
 
     utterance.onend = () => {
       this._speaking = false;
+      this._activeUtterances.delete(utterance);
       this._currentUtterance = null;
+      this._clearWatchdog();
       this._playNext();
     };
 
     utterance.onerror = (e) => {
       this._speaking = false;
+      this._activeUtterances.delete(utterance);
       this._currentUtterance = null;
+      this._clearWatchdog();
       if (e.error !== "canceled" && e.error !== "interrupted") {
         this._playNext();
       }
     };
 
+    // Unpause if necessary before speak
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+
     window.speechSynthesis.speak(utterance);
+    this._startWatchdog();
   }
 
   /**
@@ -279,7 +319,7 @@ export class TTSController {
       return;
     }
 
-    // Split text into fast sentence chunks
+    // Split text into fast sentence / clause chunks
     const sentences = cleanText.split(/(?<=[.!?:\n])\s+/).filter(s => s.trim().length > 0);
     if (sentences.length === 0) {
       onEnd?.();
@@ -293,14 +333,17 @@ export class TTSController {
   }
 
   public cancel() {
+    this._clearWatchdog();
     this._queue = [];
     this._streamComplete = false;
     this._speaking = false;
     this._currentUtterance = null;
+    this._activeUtterances.clear();
     this._onEndCallback = null;
 
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
     }
   }
 
@@ -316,10 +359,10 @@ export class TTSController {
 export interface VADConfig {
   speechThreshold?: number;       // RMS required to start speech (default: 0.035)
   silenceThreshold?: number;      // RMS below which is considered silence (default: 0.022)
-  silenceDurationMs?: number;     // Silence duration to auto-stop recording (default: 1300ms)
-  minSpeechDurationMs?: number;   // Min speech duration before silence detection applies (default: 450ms)
+  silenceDurationMs?: number;     // Silence duration to auto-stop recording (default: 650ms for snappy interaction)
+  minSpeechDurationMs?: number;   // Min speech duration before silence detection applies (default: 400ms)
   bargeInThreshold?: number;      // RMS required to trigger barge-in while assistant speaks (default: 0.055)
-  bargeInDurationMs?: number;     // Sustained speech duration for barge-in (default: 140ms)
+  bargeInDurationMs?: number;     // Sustained speech duration for barge-in (default: 130ms)
 }
 
 export class VADEngine {
@@ -346,10 +389,10 @@ export class VADEngine {
     this.config = {
       speechThreshold: config?.speechThreshold ?? 0.035,
       silenceThreshold: config?.silenceThreshold ?? 0.022,
-      silenceDurationMs: config?.silenceDurationMs ?? 1300,
-      minSpeechDurationMs: config?.minSpeechDurationMs ?? 450,
+      silenceDurationMs: config?.silenceDurationMs ?? 650, // Rapid auto-silence cutoff
+      minSpeechDurationMs: config?.minSpeechDurationMs ?? 400,
       bargeInThreshold: config?.bargeInThreshold ?? 0.055,
-      bargeInDurationMs: config?.bargeInDurationMs ?? 140,
+      bargeInDurationMs: config?.bargeInDurationMs ?? 130,
     };
   }
 

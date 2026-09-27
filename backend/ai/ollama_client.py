@@ -109,6 +109,39 @@ class ConversationMemory:
         return {sid: len(q) for sid, q in self._sessions.items()}
 
 
+# Fast conversational replies for sub-10ms instantaneous pleasantry turns
+FAST_CONVERSATIONAL_MAP = {
+    r"^(?:thank\s+you(?:\s+very\s+much|\s+so\s+much)?|thanks(?:\s+a\s+lot)?)(?:\s+(?:aegis|sir))?[.!]?$": [
+        "You're welcome, sir.",
+        "Always at your service, sir.",
+        "My pleasure, sir.",
+    ],
+    r"^(?:hello|hi|hey|greetings)(?:\s+aegis)?[.!]?$": [
+        "Online and ready, sir.",
+        "Greetings, sir. How can I assist?",
+        "Aegis online. What is your command?",
+    ],
+    r"^(?:who\s+are\s+you|what\s+is\s+your\s+name)[?.]?$": [
+        "I am Aegis, your local AI desktop assistant.",
+    ],
+    r"^(?:good\s+(?:morning|afternoon|evening))(?:\s+aegis)?[.!]?$": [
+        "Good day, sir. All systems running optimally.",
+    ],
+    r"^(?:how\s+are\s+you|how\s+are\s+things)[?.]?$": [
+        "Operating at peak efficiency, sir. Standing by for instructions.",
+    ],
+}
+
+def get_fast_conversational_reply(prompt: str) -> str | None:
+    import re
+    import random
+    cleaned = prompt.strip().lower()
+    for pattern, replies in FAST_CONVERSATIONAL_MAP.items():
+        if re.match(pattern, cleaned):
+            return random.choice(replies)
+    return None
+
+
 memory = ConversationMemory()
 
 # ─────────────────────────────────────────────
@@ -150,6 +183,25 @@ class OllamaClient:
             log.warning("Could not list models: %s", e)
             return []
 
+    async def warmup(self, model: str | None = None):
+        """Pre-warms Ollama and pins the model in VRAM permanently (-1 keep_alive)."""
+        target = model or MODEL
+        try:
+            client = await self.get_client()
+            await client.post(
+                "/api/generate",
+                json={
+                    "model": target,
+                    "prompt": "System check.",
+                    "keep_alive": -1,
+                    "options": {"num_predict": 1},
+                },
+                timeout=30.0,
+            )
+            log.info("✓ Model '%s' pinned in VRAM with keep_alive: -1", target)
+        except Exception as e:
+            log.debug("Warmup ping skipped: %s", e)
+
     def _build_prompt(
         self,
         user_prompt: str,
@@ -188,6 +240,12 @@ class OllamaClient:
         memory.add(session_id, "user", prompt)
         history = memory.get_history(session_id)
 
+        # Instant sub-10ms fast conversational response
+        fast_reply = get_fast_conversational_reply(prompt)
+        if fast_reply:
+            memory.add(session_id, "assistant", fast_reply)
+            return fast_reply
+
         action_context = None
         if enable_tools:
             fast_action = fast_path_intent(prompt)
@@ -217,11 +275,12 @@ class OllamaClient:
             "model": target_model,
             "prompt": full_prompt,
             "stream": False,
+            "keep_alive": -1,  # Keep permanently warm in VRAM!
             "options": {
                 "temperature": 0.5,
                 "top_p": 0.9,
                 "repeat_penalty": 1.1,
-                "num_predict": 120,
+                "num_predict": 75,
             },
         }
 
@@ -264,6 +323,18 @@ class OllamaClient:
         memory.add(session_id, "user", prompt)
         history = memory.get_history(session_id)
 
+        # Instant sub-10ms fast conversational response
+        fast_reply = get_fast_conversational_reply(prompt)
+        if fast_reply:
+            words = fast_reply.split(" ")
+            for i, w in enumerate(words):
+                chunk = w if i == 0 else f" {w}"
+                yield f"data: {json.dumps({'token': chunk})}\n\n"
+                await asyncio.sleep(0.012)
+            memory.add(session_id, "assistant", fast_reply)
+            yield "data: [DONE]\n\n"
+            return
+
         action_context = None
         if enable_tools:
             fast_action = fast_path_intent(prompt)
@@ -299,11 +370,12 @@ class OllamaClient:
             "model": target_model,
             "prompt": full_prompt,
             "stream": True,
+            "keep_alive": -1,  # Keep permanently warm in VRAM!
             "options": {
                 "temperature": 0.5,
                 "top_p": 0.9,
                 "repeat_penalty": 1.1,
-                "num_predict": 120,
+                "num_predict": 75,
             },
         }
 
