@@ -29,6 +29,7 @@ import {
   TTSController,
   VADEngine,
   playAudioCue,
+  AegisHarmonicSynthesizer,
 } from "./voiceController";
 
 import { AegisHudView } from "./components/AegisHudView";
@@ -529,6 +530,7 @@ export default function App() {
   const ttsRef              = useRef<TTSController>(new TTSController());
   const vadRef              = useRef<VADEngine>(new VADEngine());
   const recognitionRef      = useRef<any>(null);
+  const synthRef            = useRef<AegisHarmonicSynthesizer>(new AegisHarmonicSynthesizer());
 
   // Speech Rate State (Default 1.7x Very Fast)
   const [speechRate, setSpeechRate] = useState<number>(() => ttsRef.current.getRate());
@@ -561,6 +563,29 @@ export default function App() {
     audioCuesEnabledRef.current = audioCuesEnabled;
     localStorage.setItem("aegis_audio_cues", audioCuesEnabled ? "true" : "false");
   }, [audioCuesEnabled]);
+
+  // Procedural 110Hz + 220Hz Harmonic Ambient Drone Lifecycle
+  useEffect(() => {
+    if (voiceMode && audioCuesEnabled) {
+      synthRef.current.start(true);
+    } else {
+      synthRef.current.stop();
+    }
+    return () => {
+      synthRef.current.stop();
+    };
+  }, [voiceMode, audioCuesEnabled]);
+
+  // Modulate ambient drone presence according to cognitive and compute load
+  useEffect(() => {
+    if (voiceState === "THINKING" || voiceState === "TRANSCRIBING") {
+      synthRef.current.setIntensity(1.0); // Elevate drone presence during neural computation
+    } else if (voiceState === "SPEAKING") {
+      synthRef.current.setIntensity(0.35);
+    } else {
+      synthRef.current.setIntensity(0.08); // Subtle background hum
+    }
+  }, [voiceState]);
 
   // Persist chat
   useEffect(() => { saveHistory(chat.filter(m => !m.streaming)); }, [chat]);
@@ -800,6 +825,7 @@ export default function App() {
         }
         if (parsed.status === "action_complete") {
           setActionStatus(`${parsed.tool} ✓ ${parsed.result || "Done"}`);
+          playAudioCue("command_success", audioCuesEnabledRef.current);
           setTimeout(() => setActionStatus(null), 3500);
           return;
         }

@@ -51,6 +51,24 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
     ? (liveTranscript || "Listening to speech…")
     : (lastUserMessage || liveTranscript);
 
+  // Dynamic 50% viewport scale calculation (Core orb occupies roughly 50% of the screen/space)
+  const [coreSize, setCoreSize] = React.useState(() => {
+    if (typeof window !== "undefined") {
+      const minDim = Math.min(window.innerWidth, window.innerHeight);
+      return Math.max(320, Math.min(Math.round(minDim * 0.50), 520));
+    }
+    return 380;
+  });
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      const minDim = Math.min(window.innerWidth, window.innerHeight);
+      setCoreSize(Math.max(320, Math.min(Math.round(minDim * 0.50), 520)));
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   return (
     <div
       style={{
@@ -101,7 +119,7 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
           isVoiceMode={isVoiceMode}
           theme={theme}
           onCoreClick={onToggleVoiceMode}
-          size={360}
+          size={coreSize}
         />
 
         {/* Live Mini Spectrum Audio Waveform Bar */}
