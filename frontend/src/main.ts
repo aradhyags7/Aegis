@@ -8,10 +8,14 @@ if (started) {
 }
 
 const createWindow = () => {
-  // Create the browser window.
+  // Create cinematic desktop window with spacious HUD dimensions
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1280,
+    height: 840,
+    minWidth: 960,
+    minHeight: 640,
+    title: "AEGIS — Holographic AI Interface",
+    backgroundColor: "#030712",
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
@@ -26,8 +30,8 @@ const createWindow = () => {
     );
   }
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // DevTools available via Ctrl+Shift+I / F12 instead of auto-opening
+  // mainWindow.webContents.openDevTools();
 };
 
 // This method will be called when Electron has finished

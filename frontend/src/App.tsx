@@ -1270,17 +1270,22 @@ export default function App() {
         {/* ── Top Futuristic HUD Bar ──────────────────────── */}
         <header
           style={{
+            position: viewMode === "HUD" ? "absolute" : "relative",
+            top: 0,
+            left: 0,
+            right: 0,
             height: "56px",
-            borderBottom: "1px solid var(--cyan-border)",
-            background: "var(--bg-header)",
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
+            borderBottom: viewMode === "HUD" ? "none" : "1px solid var(--cyan-border)",
+            background: viewMode === "HUD" ? "linear-gradient(180deg, rgba(3, 7, 18, 0.75) 0%, rgba(3, 7, 18, 0) 100%)" : "var(--bg-header)",
+            backdropFilter: viewMode === "HUD" ? "none" : "blur(14px)",
+            WebkitBackdropFilter: viewMode === "HUD" ? "none" : "blur(14px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             padding: "0 24px",
             zIndex: 10,
             flexShrink: 0,
+            pointerEvents: "auto",
           }}
         >
           {/* Logo & System Badge */}

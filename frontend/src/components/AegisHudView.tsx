@@ -159,29 +159,31 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
       <div
         style={{
           position: "absolute",
-          bottom: "32px",
-          width: "calc(100% - 580px)",
-          maxWidth: "760px",
+          bottom: "24px",
+          width: "min(92%, 720px)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "14px",
+          gap: "12px",
           zIndex: 4,
         }}
       >
         {/* Live Subtitle Transcript Ribbon */}
         {(displayedUserText || lastAiMessage || isLoading || isStreaming || isRecording || searchStatus || actionStatus) && (
           <div
-            className="hud-corner-box"
+            className="hud-corner-box aegis-glass-panel"
             style={{
               width: "100%",
-              padding: "14px 20px",
+              padding: "14px 22px",
               display: "flex",
               flexDirection: "column",
               gap: "8px",
-              maxHeight: "150px",
+              maxHeight: "140px",
               overflowY: "auto",
-              boxShadow: "0 0 24px var(--shadow-glow)",
+              background: "rgba(6, 12, 24, 0.75)",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 24px var(--shadow-glow)",
               border: isRecording ? "1px solid var(--red-hazard)" : actionStatus ? "1px solid var(--amber-warn)" : "1px solid var(--cyan-border)",
             }}
           >
