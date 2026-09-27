@@ -1,60 +1,92 @@
-# Aegis — Local-First AI Desktop Assistant
+# Aegis — Adaptive Engine for General Intelligence & Systems
 
-> **A privacy-first, local AI desktop assistant inspired by J.A.R.V.I.S.**
+> **A privacy-first, local-first AI desktop assistant with a Holographic User Interface.**
 
-Aegis runs entirely on your local machine using **Ollama** for large language models and **Faster-Whisper** for speech recognition. All conversation data, processing, and voice transcription stay private and offline.
-
----
-
-## Features
-
-- **Real-Time Streaming**: Low-latency token-by-token response streaming via Server-Sent Events (SSE).
-- **Voice-to-Text Pipeline**: Offline transcription using **Faster-Whisper** (`int8` CPU quantization).
-- **Text-to-Speech (TTS)**: Built-in voice synthesis playback for hands-free conversations.
-- **Custom Markdown & Code Blocks**: Rich formatting with inline rendering, syntax highlighting, and one-click code copying.
-- **Dynamic Model Selection**: Connects directly to local Ollama instance with model switching on the fly.
-- **Persistent Conversation Memory**: Local multi-turn session history with instant search and clear capabilities.
-- **Modern Desktop UI**: Futuristic dark interface crafted with Electron, React 19, and TypeScript.
+Aegis runs entirely on your local machine using **Ollama** for large language models, **Faster-Whisper** for offline speech recognition, and native system automation for deep host PC control. All conversation data, processing, and voice transcription stay private and offline.
 
 ---
 
-## Architecture
+## 🌟 Key Features
+
+### 1. Holographic HUD Interface
+- **Central Core (Orb)**: 50% screen scale crystal-glass orb with Fresnel specular highlights, 24 inward-pointing neon filaments, and an explosive command-ingestion puff expansion.
+- **Differential Concentric Data Rings**: 3 concentric orbital rings (Outer 5s, Middle 12s, Inner 24s) with chevron framing brackets, sensor tick marks, and dynamic compute acceleration.
+- **Tactical 3D Glassmorphic Quadrants**: 4 floating perspective panels for Neural Diagnostics, Acoustic VAD, Real-Time Hardware Telemetry (CPU/RAM/Battery), and 360° Radar sweeps.
+- **Dual View Modes**: Switch instantly between the **Holographic HUD** and **Tactical Command Terminal** with `Tab`.
+
+### 2. Voice & Audio Architecture
+- **Procedural Web Audio Drone**: Zero-latency dual-oscillator 110Hz + 220Hz harmonic drone that dynamically ramps during neural computation.
+- **Stark Sound Synthesizer**: Procedural acoustic cues including ascending 3-tone arpeggios (`520Hz -> 680Hz -> 840Hz`) on successful PC command executions and instant cutoff ticks on barge-in.
+- **Offline Speech-to-Text**: Low-latency voice transcription via **Faster-Whisper** (`int8` CPU quantization).
+- **High-Velocity Speech Synthesis**: Ultra-responsive TTS configured for 1.70x speed with real-time micro-clause streaming.
+- **Zero-Latency Barge-In**: Real-time Voice Activity Detection (VAD) instantly silences speech and halts streaming when you speak.
+
+### 3. Deep Host PC Control & Safe System Automation
+- **System Audio**: Set volume levels, mute, and unmute.
+- **Media Controls**: Play, pause, skip, and rewind media players.
+- **Application Orchestration**: Launch and focus applications (Spotify, VS Code, Browser, Notepad, etc.).
+- **Real-Time Hardware Telemetry**: Live CPU load, RAM usage, battery state, and host uptime.
+- **File System Operations**: Recursive search across Documents, Downloads, Desktop, and user libraries.
+- **PowerShell Runner**: Safe command-line automation for desktop control.
+
+---
+
+## 🏛️ System Architecture
 
 ```
 Aegis/
 ├── backend/
 │   ├── ai/
-│   │   ├── ollama_client.py     # Ollama API client & conversation memory
-│   │   └── whisper_client.py    # Faster-Whisper lazy-loaded model & transcription
-│   └── main.py                  # FastAPI server & route handlers
+│   │   ├── ollama_client.py     # Ollama streaming client & conversation memory
+│   │   ├── whisper_client.py    # Faster-Whisper lazy-loaded model & transcription
+│   │   └── pc_tools.py          # Windows PC automation & hardware telemetry
+│   └── main.py                  # FastAPI server & Server-Sent Events (SSE)
+├── docs/
+│   └── AEGIS_UI_SPECIFICATION.md# Full 5-component holographic UI architecture spec
 └── frontend/
     ├── src/
-    │   ├── App.tsx              # React desktop UI, SSE stream consumer, voice controls
+    │   ├── components/
+    │   │   ├── AegisCore.tsx    # 50% scale crystal orb & differential data rings
+    │   │   ├── AegisHudView.tsx # Master holographic viewport & floating transcripts
+    │   │   └── HudTelemetry.tsx # 4 tactical glassmorphic telemetry quadrants
+    │   ├── voiceController.ts   # VAD, TTS & AegisHarmonicSynthesizer drone
+    │   ├── App.tsx              # View switcher, keyboard shortcuts & state sync
     │   ├── main.ts              # Electron main process
     │   ├── preload.ts           # Electron preload bridge
-    │   └── renderer.tsx         # React root renderer
+    │   └── renderer.tsx         # React 19 root
     └── package.json
 ```
 
 ```
-Microphone  ──>  MediaRecorder  ──>  Audio Blob  ──>  POST /voice/transcribe
-                                                              │
-                                                        Faster-Whisper
-                                                              │
-Aegis UI  <──  SSE Token Stream  <──  Ollama LLM  <──  sendMessage(text)
-   │
-SpeechSynthesis (TTS)
+Microphone  ──>  MediaRecorder  ──>  POST /voice/transcribe  ──>  Faster-Whisper
+                                                                        │
+Aegis HUD   <──  SSE Token Stream <──  Ollama LLM (llama3)  <──  sendMessage()
+    │                                           │
+Web Audio (Drone & Chimes)               Local PC Automation
+                                         (Volume / Apps / Shell)
 ```
 
 ---
 
-## Getting Started
+## ⚡ Keyboard Shortcuts
+
+| Shortcut | Action |
+| :--- | :--- |
+| `Tab` | Toggle between Holographic HUD & Tactical Command Terminal |
+| `Ctrl + M` | Toggle Continuous Hands-Free Voice Mode |
+| `Esc` | Instant Interrupt / Barge-In (Abort speech and computation) |
+| `Enter` | Send message in terminal |
+| `Ctrl + L` | Clear conversation history |
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
 1. **Node.js** (v18+ recommended)
 2. **Python** (3.10+ recommended)
-3. **Ollama**: [ollama.ai](https://ollama.ai) installed and running locally.
+3. **Ollama**: [ollama.ai](https://ollama.ai) installed and running locally with `llama3`:
    ```bash
    ollama pull llama3
    ```
@@ -71,7 +103,7 @@ venv\Scripts\activate
 # Linux / macOS
 source venv/bin/activate
 
-pip install -r requirements.txt  # or install fastapi uvicorn httpx pydantic faster-whisper
+pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
@@ -85,18 +117,18 @@ npm start
 
 ---
 
-## Roadmap
+## 🗺️ Roadmap
 
-- [x] Phase 1 & 2: Core Assistant, SSE Streaming & Faster-Whisper Voice Pipeline
-- [ ] Phase 3: Wake-word activation ("Hey Aegis") & Continuous listening mode
-- [ ] Phase 4: Long-term persistent memory & Semantic retrieval
-- [x] Phase 5: Safe desktop tool execution & PC controls (Volume, Media, App Orchestration, Hardware Telemetry, File Search, PowerShell Runner)
-- [ ] Phase 6: Vision & Local screenshot analysis
-- [ ] Phase 7: Multi-step agent planning & autonomous execution
-- [ ] Phase 8: Modular plugin and skill ecosystem
+- [x] **Phase 1 & 2**: Core Assistant, SSE Streaming & Faster-Whisper Voice Pipeline
+- [x] **Phase 3**: Holographic HUD View, Crystal Arc Reactor Core & Concentric Data Rings
+- [x] **Phase 4**: Procedural Web Audio Synthesizer, 110Hz/220Hz Drone & Zero-Latency Barge-In
+- [x] **Phase 5**: Safe Desktop Tool Execution & Host PC Controls (Volume, Media, App Orchestration, Telemetry)
+- [ ] **Phase 6**: Offline Wake-word activation ("Hey Aegis") & Continuous ambient listening
+- [ ] **Phase 7**: Vision & Local screenshot analysis
+- [ ] **Phase 8**: Autonomous multi-step agent planning
 
 ---
 
-## License
+## 📄 License
 
 MIT
