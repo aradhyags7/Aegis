@@ -8,11 +8,12 @@ Aegis runs entirely on your local machine using **Ollama** for large language mo
 
 ## 🌟 Key Features
 
-### 1. Holographic HUD Interface
-- **Central Core (Orb)**: 50% screen scale crystal-glass orb with Fresnel specular highlights, 24 inward-pointing neon filaments, and an explosive command-ingestion puff expansion.
+### 1. Holographic HUD & Tactical Chat Console
+- **Central Core (Orb)**: 50% screen scale volumetric 3D crystal-glass orb with Fresnel specular highlights, 28 living sinusoidal filaments, and an explosive command-ingestion puff expansion.
 - **Differential Concentric Data Rings**: 3 concentric orbital rings (Outer 5s, Middle 12s, Inner 24s) with chevron framing brackets, sensor tick marks, and dynamic compute acceleration.
 - **Tactical 3D Glassmorphic Quadrants**: 4 floating perspective panels for Neural Diagnostics, Acoustic VAD, Real-Time Hardware Telemetry (CPU/RAM/Battery), and 360° Radar sweeps.
-- **Dual View Modes**: Switch instantly between the **Holographic HUD** and **Tactical Command Terminal** with `Tab`.
+- **Stark Tactical Command Console**: High-tech chat timeline with docked ambient Arc Reactor, rich syntax-highlighted code blocks, one-click copy/speak, quick action chips, and zero-flicker transcription.
+- **Dual View Modes**: Switch instantly between the **Holographic HUD** and **Tactical Command Console** with `Tab`.
 
 ### 2. Voice & Audio Architecture
 - **Procedural Web Audio Drone**: Zero-latency dual-oscillator 110Hz + 220Hz harmonic drone that dynamically ramps during neural computation.
@@ -46,11 +47,12 @@ Aegis/
 └── frontend/
     ├── src/
     │   ├── components/
-    │   │   ├── AegisCore.tsx    # 50% scale crystal orb & differential data rings
-    │   │   ├── AegisHudView.tsx # Master holographic viewport & floating transcripts
-    │   │   └── HudTelemetry.tsx # 4 tactical glassmorphic telemetry quadrants
-    │   ├── voiceController.ts   # VAD, TTS & AegisHarmonicSynthesizer drone
-    │   ├── App.tsx              # View switcher, keyboard shortcuts & state sync
+    │   │   ├── AegisCore.tsx        # 50% scale crystal orb & differential data rings
+    │   │   ├── AegisHudView.tsx     # Master holographic viewport & floating transcripts
+    │   │   ├── AegisChatConsole.tsx # Stark tactical command console with docked Arc Reactor
+    │   │   └── HudTelemetry.tsx     # 4 tactical glassmorphic telemetry quadrants
+    │   ├── voiceController.ts       # VAD, TTS & AegisHarmonicSynthesizer drone
+    │   ├── App.tsx                  # View switcher, keyboard shortcuts & state sync
     │   ├── main.ts              # Electron main process
     │   ├── preload.ts           # Electron preload bridge
     │   └── renderer.tsx         # React 19 root
