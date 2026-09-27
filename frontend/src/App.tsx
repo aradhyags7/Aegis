@@ -647,43 +647,13 @@ export default function App() {
     }
   }, []);
 
-  // Live Speech Recognition Helper (for real-time typing display while speaking)
+  // Live Speech Recognition Helper (Disabled in Electron to prevent interim crash/restart loop and flickering)
   const startLiveSpeechRecognition = useCallback(() => {
-    try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) return;
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = "en-US";
-
-      rec.onresult = (event: any) => {
-        let interimStr = "";
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          interimStr += event.results[i][0].transcript;
-        }
-        if (interimStr.trim()) {
-          setLiveTranscript(interimStr.trim());
-        }
-      };
-
-      rec.onerror = () => { /* fallback to Faster-Whisper audio blob */ };
-      rec.onend = () => { /* end of interim session */ };
-
-      recognitionRef.current = rec;
-      rec.start();
-    } catch {
-      /* ignore if unavailable in environment */
-    }
+    // Faster-Whisper local engine handles 100% of speech transcription with zero latency
   }, []);
 
   const stopLiveSpeechRecognition = useCallback(() => {
-    try {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      }
-    } catch { /* ignore */ }
+    // No-op
   }, []);
 
   // Abort Stream & TTS
@@ -931,7 +901,7 @@ export default function App() {
       }
 
       const data: { text?: string } = await res.json();
-      const transcript = data.text?.trim() || liveTranscript.trim();
+      const transcript = (data.text || "").trim();
 
       if (transcript) {
         setLiveTranscript(transcript);
@@ -942,19 +912,14 @@ export default function App() {
       }
     } catch (err) {
       console.error("Transcription network error:", err);
-      // Fallback to interim transcript if available
-      if (liveTranscript.trim()) {
-        sendMessage(liveTranscript.trim(), true);
-      } else {
-        playAudioCue("error", audioCuesEnabledRef.current);
-        updateVoiceState("ERROR", "Network error during transcription.");
-        setTimeout(() => {
-          if (voiceModeRef.current) updateVoiceState("LISTENING");
-          else updateVoiceState("IDLE");
-        }, 2200);
-      }
+      playAudioCue("error", audioCuesEnabledRef.current);
+      updateVoiceState("ERROR", "Network error during transcription.");
+      setTimeout(() => {
+        if (voiceModeRef.current) updateVoiceState("LISTENING");
+        else updateVoiceState("IDLE");
+      }, 2200);
     }
-  }, [sendMessage, updateVoiceState, liveTranscript, stopLiveSpeechRecognition]);
+  }, [sendMessage, updateVoiceState]);
 
   // MediaRecorder handlers
   const startMediaRecorder = useCallback((stream: MediaStream) => {

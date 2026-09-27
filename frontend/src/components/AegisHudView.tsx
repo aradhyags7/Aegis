@@ -168,43 +168,122 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
           zIndex: 4,
         }}
       >
-        {/* Live Subtitle Transcript Ribbon */}
-        {(displayedUserText || lastAiMessage || isLoading || isStreaming || isRecording || searchStatus || actionStatus) && (
+        {/* Permanent Stable HUD Communication Console (Zero-Flicker Architecture) */}
+        <div
+          className="hud-corner-box aegis-glass-panel"
+          style={{
+            width: "100%",
+            minHeight: "84px",
+            maxHeight: "140px",
+            padding: "12px 20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+            overflowY: "auto",
+            background: "rgba(6, 12, 24, 0.78)",
+            backdropFilter: "blur(18px)",
+            WebkitBackdropFilter: "blur(18px)",
+            boxShadow: isRecording
+              ? "0 8px 32px rgba(239, 68, 68, 0.25), 0 0 20px rgba(239, 68, 68, 0.4)"
+              : voiceState === "TRANSCRIBING"
+              ? "0 8px 32px rgba(245, 158, 11, 0.2), 0 0 20px rgba(245, 158, 11, 0.35)"
+              : "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 24px var(--shadow-glow)",
+            border: isRecording
+              ? "1px solid var(--red-hazard)"
+              : voiceState === "TRANSCRIBING"
+              ? "1px solid var(--amber-warn)"
+              : actionStatus
+              ? "1px solid var(--amber-warn)"
+              : "1px solid var(--cyan-border)",
+            transition: "border 0.25s ease, box-shadow 0.25s ease",
+          }}
+        >
+          {/* Header Row: Live State Status Indicator */}
           <div
-            className="hud-corner-box aegis-glass-panel"
             style={{
-              width: "100%",
-              padding: "14px 22px",
               display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              maxHeight: "140px",
-              overflowY: "auto",
-              background: "rgba(6, 12, 24, 0.75)",
-              backdropFilter: "blur(16px)",
-              WebkitBackdropFilter: "blur(16px)",
-              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 24px var(--shadow-glow)",
-              border: isRecording ? "1px solid var(--red-hazard)" : actionStatus ? "1px solid var(--amber-warn)" : "1px solid var(--cyan-border)",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderBottom: "1px solid rgba(0, 240, 255, 0.12)",
+              paddingBottom: "5px",
             }}
           >
-            {/* Live PC Action Alert */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span
+                style={{
+                  width: "7px",
+                  height: "7px",
+                  borderRadius: "50%",
+                  background: isRecording
+                    ? "var(--red-hazard)"
+                    : voiceState === "TRANSCRIBING"
+                    ? "var(--amber-warn)"
+                    : isStreaming || isLoading
+                    ? "var(--cyan-glow)"
+                    : "var(--cyan-border-active)",
+                  boxShadow: `0 0 8px ${
+                    isRecording
+                      ? "var(--red-hazard)"
+                      : voiceState === "TRANSCRIBING"
+                      ? "var(--amber-warn)"
+                      : "var(--cyan-glow)"
+                  }`,
+                  animation: isRecording || isStreaming ? "blink 0.8s infinite" : "none",
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: "'Orbitron', monospace",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  letterSpacing: "1.2px",
+                  color: isRecording
+                    ? "var(--red-hazard)"
+                    : voiceState === "TRANSCRIBING"
+                    ? "var(--amber-warn)"
+                    : "var(--text-cyan)",
+                }}
+              >
+                {isRecording
+                  ? "VOICE_INPUT // CAPTURING SPEECH STREAM"
+                  : voiceState === "TRANSCRIBING"
+                  ? "NEURAL_DECODE // FASTER-WHISPER LOCAL PASS"
+                  : actionStatus
+                  ? "HOST_PC // EXECUTING SYSTEM COMMAND"
+                  : searchStatus
+                  ? "TIME_AWARE_WEB // INTERNET SEARCH"
+                  : isLoading && !isStreaming
+                  ? "NEURAL_SYNTHESIS // COMPUTING RESPONSE"
+                  : isStreaming
+                  ? "TRANSMITTING // STREAMING RESPONSE"
+                  : lastAiMessage
+                  ? "AEGIS // READY"
+                  : "AEGIS PROTOCOL // READY"}
+              </span>
+            </div>
+
+            <span
+              style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: "9.5px",
+                color: "var(--text-muted)",
+                letterSpacing: "0.5px",
+              }}
+            >
+              {isRecording
+                ? `MIC GAIN: ${Math.round(audioEnergy * 100)}%`
+                : activeModel}
+            </span>
+          </div>
+
+          {/* Dynamic Content Display */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {/* Live PC Action Notification */}
             {actionStatus && (
-              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <span
                   style={{
-                    fontFamily: "'Orbitron', monospace",
-                    fontSize: "10px",
-                    color: "var(--amber-warn)",
-                    fontWeight: 700,
-                    letterSpacing: "1px",
-                    flexShrink: 0,
-                  }}
-                >
-                  PC ACTION //
-                </span>
-                <span
-                  style={{
-                    fontSize: "13px",
+                    fontSize: "12.5px",
                     color: "var(--amber-warn)",
                     fontFamily: "'DM Mono', monospace",
                     animation: "textShimmer 1.6s infinite",
@@ -215,24 +294,12 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
               </div>
             )}
 
-            {/* Live Search Status Alert */}
+            {/* Live Search Notification */}
             {searchStatus && (
-              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <span
                   style={{
-                    fontFamily: "'Orbitron', monospace",
-                    fontSize: "10px",
-                    color: "var(--cyan-glow)",
-                    fontWeight: 700,
-                    letterSpacing: "1px",
-                    flexShrink: 0,
-                  }}
-                >
-                  LIVE WEB //
-                </span>
-                <span
-                  style={{
-                    fontSize: "13px",
+                    fontSize: "12.5px",
                     color: "var(--text-cyan)",
                     fontFamily: "'DM Mono', monospace",
                     animation: "textShimmer 1.6s infinite",
@@ -243,80 +310,98 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
               </div>
             )}
 
-            {/* Real-time live transcribing speech ribbon */}
-            {(isRecording || displayedUserText) && (
-              <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+            {/* State: Recording */}
+            {isRecording && (
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--text-main)",
+                    fontFamily: "'Outfit', sans-serif",
+                  }}
+                >
+                  Listening for voice input... speak freely or pause to finish.
+                </span>
+              </div>
+            )}
+
+            {/* State: Transcribing */}
+            {voiceState === "TRANSCRIBING" && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--amber-warn)",
+                    fontFamily: "'DM Mono', monospace",
+                    animation: "textShimmer 1.4s infinite",
+                  }}
+                >
+                  ⚡ Decoding audio buffer with Faster-Whisper...
+                </span>
+              </div>
+            )}
+
+            {/* State: User Message History (if not actively recording/transcribing) */}
+            {!isRecording && voiceState !== "TRANSCRIBING" && lastUserMessage && (
+              <div style={{ display: "flex", gap: "8px", alignItems: "baseline" }}>
                 <span
                   style={{
                     fontFamily: "'Orbitron', monospace",
-                    fontSize: "10px",
-                    color: isRecording ? "var(--red-hazard)" : "var(--text-cyan)",
+                    fontSize: "9.5px",
+                    color: "var(--text-cyan)",
                     fontWeight: 700,
                     letterSpacing: "1px",
                     flexShrink: 0,
                   }}
                 >
-                  {isRecording ? "LIVE SPEECH //" : "USER //"}
+                  USER:
                 </span>
                 <span
                   style={{
-                    fontSize: "13.5px",
-                    color: isRecording ? "var(--text-main)" : "var(--text-secondary)",
+                    fontSize: "13px",
+                    color: "var(--text-secondary)",
                     fontFamily: "'Outfit', sans-serif",
                     lineHeight: "1.4",
                   }}
                 >
-                  {displayedUserText}
-                  {isRecording && (
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: "6px",
-                        height: "12px",
-                        background: "var(--red-hazard)",
-                        marginLeft: "4px",
-                        animation: "blink 0.6s infinite",
-                      }}
-                    />
-                  )}
+                  {lastUserMessage}
                 </span>
               </div>
             )}
 
-            {/* AI Real-time streaming response */}
-            {(lastAiMessage || isLoading || isStreaming || voiceState === "TRANSCRIBING" || voiceState === "THINKING") && !isRecording && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: "10px",
-                  alignItems: "flex-start",
-                  borderTop: (displayedUserText || searchStatus) ? "1px solid var(--cyan-border)" : "none",
-                  paddingTop: (displayedUserText || searchStatus) ? "6px" : "0",
-                }}
-              >
+            {/* State: AI Response / Neural Generation */}
+            {!isRecording && voiceState !== "TRANSCRIBING" && (
+              <div style={{ display: "flex", gap: "8px", alignItems: "baseline" }}>
                 <span
                   style={{
                     fontFamily: "'Orbitron', monospace",
-                    fontSize: "10px",
+                    fontSize: "9.5px",
                     color: "var(--cyan-glow)",
                     fontWeight: 700,
                     letterSpacing: "1px",
                     flexShrink: 0,
                   }}
                 >
-                  AEGIS //
+                  AEGIS:
                 </span>
-                <span style={{ fontSize: "13.5px", color: "var(--text-main)", fontFamily: "'Outfit', sans-serif", lineHeight: "1.4" }}>
-                  {voiceState === "TRANSCRIBING" ? (
-                    <span style={{ color: "var(--amber-warn)", animation: "textShimmer 1.5s infinite" }}>
-                      📝 Transcribing with Faster-Whisper…
-                    </span>
-                  ) : isLoading && !isStreaming ? (
+                <span
+                  style={{
+                    fontSize: "13.5px",
+                    color: "var(--text-main)",
+                    fontFamily: "'Outfit', sans-serif",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {isLoading && !isStreaming ? (
                     <span style={{ color: "var(--text-cyan)", animation: "textShimmer 1.8s infinite" }}>
                       ◈ Synthesizing neural response…
                     </span>
-                  ) : (
+                  ) : lastAiMessage ? (
                     lastAiMessage
+                  ) : (
+                    <span style={{ color: "var(--text-muted)", fontSize: "12.5px" }}>
+                      Standing by. Click core, use voice mode (Ctrl+M), or press Tab for terminal.
+                    </span>
                   )}
                   {isStreaming && (
                     <span
@@ -334,7 +419,7 @@ export const AegisHudView: React.FC<AegisHudViewProps> = ({
               </div>
             )}
           </div>
-        )}
+        </div>
 
         {/* Bottom HUD Controls (Clean & Minimalist) */}
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
