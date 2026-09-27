@@ -219,6 +219,37 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
     return filaments;
   }, [size]);
 
+  // 64 Precise Ticks for Inner Data Ring (24s period)
+  const innerRingTicks = useMemo(() => {
+    const ticks = [];
+    const count = 64;
+    const baseR = size * 0.325 + (isHovered ? 4 : 0);
+    for (let i = 0; i < count; i++) {
+      const isMajor = i % 8 === 0;
+      const tickLen = isMajor ? 6 : 3;
+      const angle = (i * 360) / count;
+      const rad = (angle * Math.PI) / 180;
+      const x1 = size / 2 + Math.cos(rad) * baseR;
+      const y1 = size / 2 + Math.sin(rad) * baseR;
+      const x2 = size / 2 + Math.cos(rad) * (baseR + tickLen);
+      const y2 = size / 2 + Math.sin(rad) * (baseR + tickLen);
+      ticks.push({ id: i, x1, y1, x2, y2, isMajor, angle });
+    }
+    return ticks;
+  }, [size, isHovered]);
+
+  // 3 Outer Chevron Framing Brackets (5s period)
+  const outerChevrons = useMemo(() => {
+    const chevrons = [];
+    const count = 3;
+    const r = size * 0.455 + (isHovered ? 10 : 0);
+    for (let i = 0; i < count; i++) {
+      const angle = i * 120;
+      chevrons.push({ id: i, angle, r });
+    }
+    return chevrons;
+  }, [size, isHovered]);
+
   return (
     <div
       onClick={handleClick}
@@ -309,19 +340,11 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
           />
         ))}
 
-        {/* Outermost Compass Perimeter Ring */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={size * 0.47}
-          fill="none"
-          stroke={stateConfig.primaryColor}
-          strokeWidth="1"
-          strokeOpacity={isLight ? 0.35 : 0.25}
-          strokeDasharray="4 8"
-        />
+        {/* =========================================================
+            THREE HOLOGRAPHIC CONCENTRIC DATA RINGS
+            ========================================================= */}
 
-        {/* 1. Outer Rotating Segmented Telemetry Ring */}
+        {/* 1. OUTER RING (Fast 5.0s Clockwise) — Critical Alerts & Chevron Framing */}
         <g
           style={{
             transformOrigin: "center center",
@@ -331,34 +354,33 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
           <circle
             cx={size / 2}
             cy={size / 2}
-            r={size * 0.44}
+            r={size * 0.455 + (isHovered ? 10 : 0)}
             fill="none"
             stroke={stateConfig.primaryColor}
-            strokeWidth="1.8"
-            strokeDasharray={`${size * 0.28} ${size * 0.08} ${size * 0.04} ${size * 0.08}`}
+            strokeWidth="1.6"
+            strokeDasharray={`${size * 0.22} ${size * 0.08} ${size * 0.04} ${size * 0.08}`}
             strokeOpacity={isLight ? 0.85 : 0.75}
             filter="url(#aegisGlow)"
           />
 
-          {/* 4 Compass Telemetry Nodes */}
-          {[0, 90, 180, 270].map((deg) => {
-            const rad = (deg * Math.PI) / 180;
-            const x = size / 2 + Math.cos(rad) * (size * 0.44);
-            const y = size / 2 + Math.sin(rad) * (size * 0.44);
+          {/* Triple Chevron Framing Brackets with glowing pointer arrows */}
+          {outerChevrons.map((c) => {
+            const rad = (c.angle * Math.PI) / 180;
+            const cx = size / 2 + Math.cos(rad) * c.r;
+            const cy = size / 2 + Math.sin(rad) * c.r;
             return (
-              <circle
-                key={deg}
-                cx={x}
-                cy={y}
-                r="3"
-                fill={stateConfig.primaryColor}
-                filter="url(#aegisGlow)"
-              />
+              <g key={c.id} transform={`rotate(${c.angle} ${cx} ${cy})`}>
+                <polygon
+                  points={`${cx - 5},${cy - 4} ${cx + 5},${cy} ${cx - 5},${cy + 4}`}
+                  fill={stateConfig.primaryColor}
+                  filter="url(#aegisGlow)"
+                />
+              </g>
             );
           })}
         </g>
 
-        {/* 2. Middle Counter-Rotating Gear Ring */}
+        {/* 2. MIDDLE RING (Medium 12.0s Counter-Clockwise) — Environmental Telemetry */}
         <g
           style={{
             transformOrigin: "center center",
@@ -368,20 +390,22 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
           <circle
             cx={size / 2}
             cy={size / 2}
-            r={size * 0.38}
+            r={size * 0.39 + (isHovered ? 6 : 0)}
             fill="none"
             stroke={stateConfig.secondaryColor}
-            strokeWidth="1.2"
-            strokeDasharray="8 6 22 6"
-            strokeOpacity={isLight ? 0.7 : 0.6}
+            strokeWidth="1.4"
+            strokeDasharray="8 16 32 8"
+            strokeOpacity={isLight ? 0.75 : 0.65}
           />
-          {/* Tactical Crosshair Marks */}
+
+          {/* 4 Orbital Sensor Crosshairs */}
           {[45, 135, 225, 315].map((deg) => {
             const rad = (deg * Math.PI) / 180;
-            const x1 = size / 2 + Math.cos(rad) * (size * 0.36);
-            const y1 = size / 2 + Math.sin(rad) * (size * 0.36);
-            const x2 = size / 2 + Math.cos(rad) * (size * 0.40);
-            const y2 = size / 2 + Math.sin(rad) * (size * 0.40);
+            const rMid = size * 0.39 + (isHovered ? 6 : 0);
+            const x1 = size / 2 + Math.cos(rad) * (rMid - 4);
+            const y1 = size / 2 + Math.sin(rad) * (rMid - 4);
+            const x2 = size / 2 + Math.cos(rad) * (rMid + 4);
+            const y2 = size / 2 + Math.sin(rad) * (rMid + 4);
             return (
               <line
                 key={deg}
@@ -390,9 +414,63 @@ export const AegisCore: React.FC<AegisCoreProps> = ({
                 x2={x2}
                 y2={y2}
                 stroke={stateConfig.primaryColor}
-                strokeWidth="2"
-                strokeOpacity="0.9"
+                strokeWidth="1.8"
+                strokeOpacity="0.85"
               />
+            );
+          })}
+        </g>
+
+        {/* 3. INNER RING (Slow 24.0s Clockwise) — 64 Ticks & Kernel Diagnostics */}
+        <g
+          style={{
+            transformOrigin: "center center",
+            animation: `spinClockwise ${stateConfig.spinSpeedOuter === "2.8s" ? "4s" : "24s"} linear infinite`,
+          }}
+        >
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={size * 0.325 + (isHovered ? 4 : 0)}
+            fill="none"
+            stroke={stateConfig.primaryColor}
+            strokeWidth="0.8"
+            strokeOpacity={isLight ? 0.4 : 0.3}
+          />
+
+          {/* 64 System Diagnostic Ticks */}
+          {innerRingTicks.map((t) => (
+            <line
+              key={t.id}
+              x1={t.x1}
+              y1={t.y1}
+              x2={t.x2}
+              y2={t.y2}
+              stroke={stateConfig.primaryColor}
+              strokeWidth={t.isMajor ? "1.6" : "0.9"}
+              strokeOpacity={t.isMajor ? 0.85 : 0.45}
+            />
+          ))}
+
+          {/* 4 Quadrant Degree Telemetry Notches */}
+          {[0, 90, 180, 270].map((deg) => {
+            const rad = (deg * Math.PI) / 180;
+            const rDeg = size * 0.35 + (isHovered ? 4 : 0);
+            const x = size / 2 + Math.cos(rad) * rDeg;
+            const y = size / 2 + Math.sin(rad) * rDeg;
+            return (
+              <text
+                key={deg}
+                x={x}
+                y={y + 3}
+                textAnchor="middle"
+                fill={stateConfig.primaryColor}
+                fontSize="6.5"
+                fontFamily="'DM Mono', monospace"
+                opacity="0.75"
+              >
+                {deg.toString().padStart(2, "0")}°
+              </text>
             );
           })}
         </g>
