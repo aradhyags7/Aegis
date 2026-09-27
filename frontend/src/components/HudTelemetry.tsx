@@ -14,6 +14,15 @@ interface HudTelemetryProps {
   isVoiceMode: boolean;
 }
 
+interface SystemTelemetry {
+  cpu_percent?: number;
+  ram_percent?: number;
+  battery_percent?: number | null;
+  battery_plugged?: boolean | null;
+  uptime_formatted?: string;
+  hostname?: string;
+}
+
 export const HudTelemetry: React.FC<HudTelemetryProps> = ({
   activeModel,
   backendStatus,
@@ -28,9 +37,11 @@ export const HudTelemetry: React.FC<HudTelemetryProps> = ({
 }) => {
   const [timeStr, setTimeStr] = useState("");
   const [dateStr, setDateStr] = useState("");
+  const [telemetry, setTelemetry] = useState<SystemTelemetry | null>(null);
 
   const isLight = theme === "light";
 
+  // Clock
   useEffect(() => {
     const updateTime = () => {
       const d = new Date();
@@ -49,33 +60,55 @@ export const HudTelemetry: React.FC<HudTelemetryProps> = ({
     return () => clearInterval(interval);
   }, []);
 
+  // Poll Hardware Telemetry
+  useEffect(() => {
+    let mounted = true;
+    const fetchTelemetry = async () => {
+      try {
+        const res = await fetch("http://localhost:8000/system/telemetry");
+        if (res.ok && mounted) {
+          const data = await res.json();
+          setTelemetry(data);
+        }
+      } catch {
+        /* ignore if offline */
+      }
+    };
+    fetchTelemetry();
+    const t = setInterval(fetchTelemetry, 6000);
+    return () => {
+      mounted = false;
+      clearInterval(t);
+    };
+  }, []);
+
   const rmsDb = Math.round(audioEnergy * 100);
 
   return (
     <div
       style={{
         position: "absolute",
-        inset: "64px 24px 24px 24px",
-        display: "flex",
-        justifyContent: "space-between",
+        inset: 0,
         pointerEvents: "none",
         zIndex: 2,
+        overflow: "hidden",
       }}
     >
-      {/* ── Left Telemetry Card (System Diagnostics) ──── */}
+      {/* ── TOP-LEFT: [01] SYS_DIAGNOSTICS ────────────────── */}
       <div
-        className="hud-corner-box"
+        className="hud-corner-box aegis-glass-panel"
         style={{
+          position: "absolute",
+          top: "64px",
+          left: "24px",
           width: "260px",
           padding: "16px 18px",
           display: "flex",
           flexDirection: "column",
           gap: "12px",
           pointerEvents: "auto",
-          alignSelf: "flex-start",
         }}
       >
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -91,8 +124,8 @@ export const HudTelemetry: React.FC<HudTelemetryProps> = ({
                 width: "6px",
                 height: "6px",
                 borderRadius: "50%",
-                background: isLight ? "#0284c7" : "#00f0ff",
-                boxShadow: isLight ? "0 0 6px #0284c7" : "0 0 8px #00f0ff",
+                background: isLight ? "#0284c7" : "var(--aegis-cyan)",
+                boxShadow: "0 0 8px var(--aegis-cyan)",
               }}
             />
             <span
@@ -130,7 +163,7 @@ export const HudTelemetry: React.FC<HudTelemetryProps> = ({
               letterSpacing: "1px",
             }}
           >
-            STARK STAMP // LOCAL
+            AEGIS STAMP // LOCAL
           </div>
           <div
             style={{
@@ -163,16 +196,12 @@ export const HudTelemetry: React.FC<HudTelemetryProps> = ({
             <span style={{ color: "var(--text-cyan)", fontWeight: 600 }}>FASTER-WHISPER</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--text-muted)" }}>VOICE_SYNTHESIS:</span>
-            <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>ELECTRON TTS</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--text-muted)" }}>SESSION_MEMORY:</span>
+            <span style={{ color: "var(--text-muted)" }}>SESSION_TURNS:</span>
             <span style={{ color: "var(--text-main)", fontFamily: "'DM Mono', monospace" }}>{messageCount} TURNS</span>
           </div>
         </div>
 
-        {/* Protocol Security Clearance */}
+        {/* Security Clearance */}
         <div
           style={{
             borderTop: isLight ? "1px solid rgba(2, 132, 199, 0.2)" : "1px solid rgba(0, 240, 255, 0.15)",
@@ -188,20 +217,21 @@ export const HudTelemetry: React.FC<HudTelemetryProps> = ({
         </div>
       </div>
 
-      {/* ── Right Telemetry Card (Acoustic & VAD Telemetry) ── */}
+      {/* ── TOP-RIGHT: [02] ACOUSTIC_VAD ───────────────── */}
       <div
-        className="hud-corner-box"
+        className="hud-corner-box aegis-glass-panel"
         style={{
+          position: "absolute",
+          top: "64px",
+          right: "24px",
           width: "260px",
           padding: "16px 18px",
           display: "flex",
           flexDirection: "column",
           gap: "12px",
           pointerEvents: "auto",
-          alignSelf: "flex-start",
         }}
       >
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -289,7 +319,7 @@ export const HudTelemetry: React.FC<HudTelemetryProps> = ({
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <span style={{ color: "var(--text-muted)" }}>AUTO_SILENCE_CUTOFF:</span>
-            <span style={{ color: "var(--green-online)", fontWeight: 600 }}>1300 ms [ARMED]</span>
+            <span style={{ color: "var(--green-online)", fontWeight: 600 }}>650 ms [ARMED]</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <span style={{ color: "var(--text-muted)" }}>BARGE_IN_OVERRIDE:</span>
@@ -337,6 +367,175 @@ export const HudTelemetry: React.FC<HudTelemetryProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ── BOTTOM-LEFT: [03] HARDWARE_STATUS ──────────── */}
+      <div
+        className="hud-corner-box aegis-glass-panel"
+        style={{
+          position: "absolute",
+          bottom: "24px",
+          left: "24px",
+          width: "260px",
+          padding: "14px 18px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          pointerEvents: "auto",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            borderBottom: isLight ? "1px solid rgba(2, 132, 199, 0.2)" : "1px solid rgba(0, 240, 255, 0.15)",
+            paddingBottom: "6px",
+          }}
+        >
+          <span style={{ fontFamily: "'Orbitron', monospace", fontSize: "10.5px", fontWeight: 700, color: "var(--text-cyan)", letterSpacing: "1px" }}>
+            HARDWARE_STATUS
+          </span>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: "var(--text-muted)" }}>
+            [03]
+          </span>
+        </div>
+
+        {/* CPU & RAM Bar Gauges */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "11px", fontFamily: "'Rajdhani', sans-serif" }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: "var(--text-muted)" }}>CPU_LOAD:</span>
+            <span style={{ color: (telemetry?.cpu_percent ?? 12) > 80 ? "var(--red-hazard)" : "var(--text-cyan)", fontFamily: "'DM Mono', monospace" }}>
+              {telemetry?.cpu_percent ?? "--"}%
+            </span>
+          </div>
+          <div style={{ height: "4px", background: "rgba(0,240,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${telemetry?.cpu_percent ?? 15}%`, background: "var(--cyan-glow)", transition: "width 0.3s ease" }} />
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "2px" }}>
+            <span style={{ color: "var(--text-muted)" }}>RAM_UTILIZATION:</span>
+            <span style={{ color: "var(--text-cyan)", fontFamily: "'DM Mono', monospace" }}>
+              {telemetry?.ram_percent ?? "--"}%
+            </span>
+          </div>
+          <div style={{ height: "4px", background: "rgba(0,240,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${telemetry?.ram_percent ?? 45}%`, background: "var(--blue-core)", transition: "width 0.3s ease" }} />
+          </div>
+
+          {telemetry?.battery_percent !== null && telemetry?.battery_percent !== undefined && (
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
+              <span style={{ color: "var(--text-muted)" }}>BATTERY_LEVEL:</span>
+              <span style={{ color: telemetry.battery_percent > 20 ? "var(--green-online)" : "var(--amber-warn)", fontFamily: "'DM Mono', monospace" }}>
+                {telemetry.battery_percent}% {telemetry.battery_plugged ? "⚡" : ""}
+              </span>
+            </div>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "2px" }}>
+            <span style={{ color: "var(--text-muted)" }}>SYSTEM_UPTIME:</span>
+            <span style={{ color: "var(--text-main)", fontFamily: "'DM Mono', monospace" }}>
+              {telemetry?.uptime_formatted ?? "Active"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── BOTTOM-RIGHT: [04] RADAR_TELEMETRY ─────────── */}
+      <div
+        className="hud-corner-box aegis-glass-panel"
+        style={{
+          position: "absolute",
+          bottom: "24px",
+          right: "24px",
+          width: "260px",
+          padding: "14px 18px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          pointerEvents: "auto",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            borderBottom: isLight ? "1px solid rgba(2, 132, 199, 0.2)" : "1px solid rgba(0, 240, 255, 0.15)",
+            paddingBottom: "6px",
+          }}
+        >
+          <span style={{ fontFamily: "'Orbitron', monospace", fontSize: "10.5px", fontWeight: 700, color: "var(--text-cyan)", letterSpacing: "1px" }}>
+            RADAR_TELEMETRY
+          </span>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: "var(--text-muted)" }}>
+            [04]
+          </span>
+        </div>
+
+        {/* 360° Rotating Radar Sweep Canvas */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div
+            style={{
+              position: "relative",
+              width: "60px",
+              height: "60px",
+              borderRadius: "50%",
+              border: "1px solid var(--cyan-border)",
+              background: "rgba(0, 240, 255, 0.03)",
+              overflow: "hidden",
+              flexShrink: 0,
+            }}
+          >
+            {/* Radar Crosshairs */}
+            <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: "1px", background: "rgba(0,240,255,0.2)" }} />
+            <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: "1px", background: "rgba(0,240,255,0.2)" }} />
+
+            {/* Sweep Beam */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: "50%",
+                background: "conic-gradient(from 0deg, rgba(0,240,255,0.4) 0deg, transparent 60deg, transparent 360deg)",
+                animation: "radarSweep360 3s linear infinite",
+              }}
+            />
+
+            {/* Simulated Radar Blip */}
+            <div
+              style={{
+                position: "absolute",
+                top: "28%",
+                left: "64%",
+                width: "4px",
+                height: "4px",
+                borderRadius: "50%",
+                background: "var(--cyan-glow)",
+                boxShadow: "0 0 6px var(--cyan-glow)",
+              }}
+            />
+          </div>
+
+          {/* Telemetry Status Labels */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "11px", fontFamily: "'Rajdhani', sans-serif", flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: "var(--text-muted)" }}>RADAR_SCAN:</span>
+              <span style={{ color: "var(--green-online)", fontWeight: 600 }}>SWEEPING</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: "var(--text-muted)" }}>PERIPHERALS:</span>
+              <span style={{ color: "var(--text-cyan)", fontFamily: "'DM Mono', monospace" }}>LOCKED</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: "var(--text-muted)" }}>HOST_NODE:</span>
+              <span style={{ color: "var(--text-main)", fontFamily: "'DM Mono', monospace" }}>
+                {telemetry?.hostname ? telemetry.hostname.slice(0, 10) : "LOCAL PC"}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
+
