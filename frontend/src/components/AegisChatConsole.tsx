@@ -684,20 +684,7 @@ export const AegisChatConsole: React.FC<AegisChatConsoleProps> = ({
           <button
             key={i}
             onClick={() => onSendMessage(qc.query)}
-            style={{
-              background: "rgba(0, 240, 255, 0.05)",
-              border: "1px solid rgba(0, 240, 255, 0.2)",
-              color: "var(--text-cyan)",
-              fontSize: "11px",
-              padding: "4px 10px",
-              borderRadius: "4px",
-              cursor: "pointer",
-              fontFamily: "'Rajdhani', sans-serif",
-              fontWeight: 600,
-              letterSpacing: "0.5px",
-              whiteSpace: "nowrap",
-              transition: "all 0.15s ease",
-            }}
+            className="tactical-chip"
           >
             {qc.label}
           </button>

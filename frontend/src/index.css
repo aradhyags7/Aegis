@@ -438,3 +438,31 @@ html, body, #root {
   transform: translateY(-2px);
 }
 
+/* Tactical Chat Console Utilities */
+.tactical-chip {
+  background: rgba(0, 240, 255, 0.05);
+  border: 1px solid rgba(0, 240, 255, 0.22);
+  color: var(--text-cyan);
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tactical-chip:hover {
+  background: var(--cyan-hover);
+  border-color: var(--cyan-glow);
+  color: var(--cyan-glow);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.tactical-chip:active {
+  transform: translateY(0);
+}
+
+
